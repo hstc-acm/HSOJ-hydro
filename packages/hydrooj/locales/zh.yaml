@@ -637,6 +637,7 @@ Rank: 排名
 ranking: 排名
 Ranking: 排名
 Read record codes after accept: 题目通过后读取记录的代码
+Realname: 真实姓名
 Recalculates nSubmit and nAccept in problem status.: 重新计算每道题目的 AC 量和提交量
 Recommended: 推荐
 Record {0} not found.: 记录 {0} 不存在。
@@ -685,7 +686,7 @@ Sample: 样例
 Save All Changes: 保存所有修改
 Saved session expire seconds: 保存的会话的过期秒数
 Saved session: 已保存的会话
-School: 学校
+School: 学校全称
 score canceled: 成绩取消
 Score: 分数
 Scoreboard (Hidden): 成绩表 (隐藏)
@@ -867,7 +868,7 @@ user_sudo: 用户安全授权
 User-defined role: 用户定义的角色
 User: 用户
 Username / UID: 用户名或 UID
-Username: 用户名
+Username: 用户名（学工号）
 Users with those roles will be removed from the domain.: 拥有这些角色的用户将从此域中移除。
 Users: 用户
 Using your {0} universal account: 使用您的 {0} 通用账户

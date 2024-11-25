@@ -357,6 +357,7 @@ Read data of own problems: 讀取自己題目的資料
 Read data of problem: 讀取題目資料
 Ready (☆▽☆): 馬上開始 (☆▽☆)
 Ready: 即將開始
+Realname: 真實姓名
 Recent {0} Records: 最近 {0} 條記錄
 Recent Activities: 最近活動
 Recent Solutions: 最近題解
@@ -506,7 +507,7 @@ user_register: 註冊
 User-defined role: 使用者定義的角色
 User: 使用者
 Username / UID: 使用者名或 UID
-Username: 使用者名
+Username: 使用者名（學工號）
 Users with those roles will be removed from the domain.: 擁有這些角色的使用者將從此域中移除。
 Users: 使用者
 Valid for registered users who are not members of the domain: 對域外註冊使用者有效

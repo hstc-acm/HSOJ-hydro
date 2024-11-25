@@ -74,6 +74,7 @@ class UserLoginHandler extends Handler {
         }
         await udoc.checkPassword(password);
         await user.setById(udoc._id, { loginat: new Date(), loginip: this.request.ip });
+        logger.info('User: %s logged in, Time: %s , Ip: %s', udoc.uname, new Date(), this.request.ip);
         if (!udoc.hasPriv(PRIV.PRIV_USER_PROFILE)) throw new BlacklistedError(uname, udoc.banReason);
         this.context.HydroContext.user = udoc;
         this.session.viewLang = '';
@@ -263,17 +264,29 @@ class UserRegisterWithCodeHandler extends Handler {
     @param('verifyPassword', Types.Password)
     @param('uname', Types.Username, true)
     @param('code', Types.String)
+    @param('school', Types.String)
+    @param('realname', Types.String)
     async post(
         domainId: string, password: string, verify: string,
+        school: string, realname: string,
         uname = '', code: string,
     ) {
         if (this.tdoc.oauth?.[0] && global.Hydro.module.oauth[this.tdoc.oauth[0]].lockUsername) {
             uname = this.tdoc.username;
         }
         if (!Types.Username[1](uname)) throw new ValidationError('uname');
+        if (isNaN(Number(uname))) throw new ValidationError('StudentId');
+        if (!school) throw new ValidationError('school');
+        if (!realname) throw new ValidationError('realname');
         if (password !== verify) throw new VerifyPasswordError();
         if (this.tdoc.phone) this.tdoc.mail = `${String.random(12)}@hydro.local`;
         const uid = await user.create(this.tdoc.mail, uname, password, undefined, this.request.ip);
+
+        const displayName = uname + realname;
+        await domain.setUserInDomain(domainId, uid, { displayName: displayName });
+        await user.setById(uid, { school: school });
+        await user.setById(uid, { studentId: uname });
+
         await token.del(code, token.TYPE_REGISTRATION);
         const [id, mailDomain] = this.tdoc.mail.split('@');
         const $set: any = this.tdoc.set || {};

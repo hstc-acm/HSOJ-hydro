@@ -190,8 +190,8 @@ AccountSetting(
     Setting('setting_info', 'qq', null, 'text', 'QQ'),
     Setting('setting_info', 'gender', builtin.USER_GENDER_OTHER, builtin.USER_GENDER_RANGE, 'Gender'),
     Setting('setting_info', 'bio', null, 'markdown', 'Bio'),
-    Setting('setting_info', 'school', '', 'text', 'School'),
-    Setting('setting_info', 'studentId', '', 'text', 'Student ID'),
+    Setting('setting_info', 'school', '', 'text', 'School', null, FLAG_DISABLED),
+    Setting('setting_info', 'studentId', '', 'text', 'Student ID', null, FLAG_DISABLED),
     Setting('setting_info', 'phone', null, 'text', 'Phone', null, FLAG_DISABLED),
     Setting('setting_customize', 'backgroundImage',
         '/components/profile/backgrounds/1.jpg', 'text', 'Profile Background Image',
@@ -212,7 +212,7 @@ DomainSetting(
 );
 
 DomainUserSetting(
-    Setting('setting_info', 'displayName', '', 'text', 'Display Name'),
+    Setting('setting_info', 'displayName', '', 'text', 'Display Name', null, FLAG_DISABLED),
     Setting('setting_storage', 'nAccept', 0, 'number', 'nAccept', null, FLAG_HIDDEN | FLAG_DISABLED),
     Setting('setting_storage', 'nSubmit', 0, 'number', 'nSubmit', null, FLAG_HIDDEN | FLAG_DISABLED),
     Setting('setting_storage', 'nLike', 0, 'number', 'nLike', null, FLAG_HIDDEN | FLAG_DISABLED),
