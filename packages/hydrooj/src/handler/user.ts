@@ -74,7 +74,8 @@ class UserLoginHandler extends Handler {
         }
         await udoc.checkPassword(password);
         await user.setById(udoc._id, { loginat: new Date(), loginip: this.request.ip });
-        logger.info('User: %s logged in, Time: %s , Ip: %s', udoc.uname, new Date(), this.request.ip);
+        let ndate = new Date();
+        console.log(ndate.toLocaleString("zh-cn",  { timeZone: "Asia/Shanghai" })," User:" ,udoc.uname, "login at:",this.request.ip);
         if (!udoc.hasPriv(PRIV.PRIV_USER_PROFILE)) throw new BlacklistedError(uname, udoc.banReason);
         this.context.HydroContext.user = udoc;
         this.session.viewLang = '';
@@ -268,16 +269,16 @@ class UserRegisterWithCodeHandler extends Handler {
     @param('realname', Types.String)
     async post(
         domainId: string, password: string, verify: string,
-        school: string, realname: string,
         uname = '', code: string,
+        school: string, realname: string,
     ) {
         if (this.tdoc.oauth?.[0] && global.Hydro.module.oauth[this.tdoc.oauth[0]].lockUsername) {
             uname = this.tdoc.username;
         }
         if (!Types.Username[1](uname)) throw new ValidationError('uname');
         if (isNaN(Number(uname))) throw new ValidationError('StudentId');
-        if (!school) throw new ValidationError('school');
-        if (!realname) throw new ValidationError('realname');
+        if (school.length<4) throw new ValidationError('school');
+        if (realname.length<2) throw new ValidationError('realname');
         if (password !== verify) throw new VerifyPasswordError();
         if (this.tdoc.phone) this.tdoc.mail = `${String.random(12)}@hydro.local`;
         const uid = await user.create(this.tdoc.mail, uname, password, undefined, this.request.ip);

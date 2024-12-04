@@ -1,4 +1,4 @@
-# Hydro
+# HSOJ-hydro
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/hydro-dev/hydro/build.yml?branch=master)
 ![hydrooj](https://img.shields.io/npm/dm/hydrooj)
@@ -7,22 +7,13 @@
 ![GitHub contributors](https://img.shields.io/github/contributors/hydro-dev/Hydro)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/y/hydro-dev/Hydro)
 
-Hydro 是一个高效信息学在线测评系统。易安装，跨平台，多功能，可扩展，有题库。
+HSOJ-hydro 是韩山师范学院acm集训队（笔架山算法小队）二次开发的在线评测系统。
 
-对于不熟悉 Linux 或是懒得运维的老师，我们也提供了免费开通即用的在线版本，  
-详情前往 [https://hydro.ac](https://hydro.ac) 查看 [操作指引](https://hydro.ac/discuss/6172ceeed850d38c79ae18f9)  
+“韩山师范学院”，“HSOJ”标识均为韩山师范学院所有，仅供韩山师范学院使用，禁止未经授权的其他使用。
 
-将安装命令粘贴到控制台一键安装，安装后注册首个用户自动获得超级管理员权限。  
-兼容主流 Linux 发行版，推荐使用 Debian 12，支持 arm64 设备（树莓派等）
+本项目为Hydro OJ下游版本。
 
-```sh
-LANG=zh . <(curl https://hydro.ac/setup.sh)
-```
-
-[中文文档](https://hydro.js.org/) / [English](./README-EN.md)  
-
-相关文档若说明的不够详细，请提交 Pull Request 或联系开发组说明。  
-bug 和功能建议请在 Issues 提出。  
+[Hydro中文文档](https://hydro.js.org/) 
 
 ## 系统特点
 
@@ -99,14 +90,6 @@ Hydro 支持多种赛制，包括 ACM/ICPC 赛制（支持封榜），OI 赛制�
 Hydro 的语言设置并非硬编码于系统中，而是使用了配置文件。
 只要能写出对应语言的编译命令和运行命令，Hydro 都可以进行判题。
 
-## 联系我们
-
-Email：i@undefined.moe
-Telegram [@undefinedmoe](https://t.me/undefinedmoe)  
-Hydro 用户群：1085853538  
-
-注：加入用户群请先阅读[《提问的智慧》](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way/blob/main/README-zh_CN.md)。  
-同时群内可能存在部分令您感到不适或感到冒犯的内容。若对此有顾虑**请勿加群**。
 
 <details>
 <summary><h2>更新日志（点击展开）</h2></summary>
@@ -805,19 +788,3 @@ Hydro 用户群：1085853538
 即：  
 在您部署 Hydro 时，需要保留底部的 `Powered by Hydro` 字样，其中的 `Hydro` 字样需指向 `hydro.js.org/本仓库/fork` 之一的链接。  
 若您对源码做出修改/扩展，同样需要以 AGPL-3.0-or-later 开源，您可以以 `Powered by Hydro, Modified by xxx` 格式在页脚注明。  
-
-## 贡献代码
-
-参照 [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## 鸣谢
-
-排名不分先后，按照链接字典序  
-
-- [Github](https://github.com/) 为 Hydro 提供了代码托管与自动构建。  
-- [criyle](https://github.com/criyle) 提供评测沙箱实现。  
-- [Vijos](https://github.com/vijos/vj4) 为 Hydro 提供了 UI 框架。  
-
-## Sponsors
-
-- [云斗学院](https://www.yundouxueyuan.com)
