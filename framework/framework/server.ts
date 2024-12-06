@@ -446,7 +446,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             wsServer.close();
         });
         await new Promise((r) => {
-            httpServer.listen(this.config.port, this.config.host || '127.0.0.1', () => {
+            httpServer.listen(this.config.port, this.config.host || '0.0.0.0', () => {
                 logger.success('Server listening at: %d', this.config.port);
                 r(true);
             });

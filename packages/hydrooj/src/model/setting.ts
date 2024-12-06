@@ -246,7 +246,7 @@ SystemSetting(
     Setting('setting_server', 'server.upload', '256m', 'text', 'server.upload', 'Max upload file size'),
     Setting('setting_server', 'server.cdn', '/', 'text', 'server.cdn', 'CDN Prefix'),
     Setting('setting_server', 'server.ws', '/', 'text', 'server.ws', 'WebSocket Prefix'),
-    Setting('setting_server', 'server.host', '127.0.0.1', 'text', 'server.host', 'Listen host'),
+    Setting('setting_server', 'server.host', '0.0.0.0', 'text', 'server.host', 'Listen host'),
     Setting('setting_server', 'server.port', 8888, 'number', 'server.port', 'Server Port'),
     Setting('setting_server', 'server.xff', null, 'text', 'server.xff', 'IP Header'),
     Setting('setting_server', 'server.xhost', null, 'text', 'server.xhost', 'Hostname Header'),
