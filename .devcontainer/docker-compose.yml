@@ -2,21 +2,28 @@ version: '3.9'
 
 services:
   mongo:
-    image: mongo:4-focal
+    image: bitnami/mongodb:latest
     restart: unless-stopped
+    environment:
+      - MONGODB_ROOT_USER=root
+      - MONGODB_ROOT_PASSWORD=12345678
+      - MONGODB_USERNAME=hydro
+      - MONGODB_PASSWORD=12345678
+      - MONGODB_DATABASE=hydro
     volumes:
-      - mongodb-data:/data/db
+      - ./mongodb-data:/bitnami/mongodb
   hydro:
-    build: 
-      context: .
-      dockerfile: Dockerfile
+    image: hsoj-hydro:latest
     privileged: true
+    ports:
+      - 8888:8888
     depends_on:
       - mongo
+    environment:
+      - DB_HOST=mongo
+      - DB_PORT=27017
+      - DB_USER=hydro
+      - DB_PASSWD=12345678
     volumes:
-      - ..:/workspace:cached
-      - testdata:/data/file
-
-volumes:
-  mongodb-data:
-  testdata:
+      - ./hydro:/root/.hydro
+      - ./testdata:/data/file
