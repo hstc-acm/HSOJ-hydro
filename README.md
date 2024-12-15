@@ -94,6 +94,14 @@ Hydro 的语言设置并非硬编码于系统中，而是使用了配置文件�
 <details>
 <summary><h2>更新日志（点击展开）</h2></summary>
 
+## Hydro 4.18.2 / UI 4.56.2
+
+- core: 修复提交答案题压缩包提交 (#917)
+- ui: 优化 domain_user 页面性能
+- core: 优化评测任务调度
+- ui: 下载文件失败时自动重试
+- core: Consumer: 从错误中自动恢复
+
 ## Hydro 4.18.0 / UI 4.56.0
 
 - core&ui: ScoreboardView API
