@@ -26,6 +26,8 @@ import user, { deleteUserCache } from '../model/user';
 import {
     Handler, param, post, Types,
 } from '../service/server';
+import { Logger } from '@hydrooj/utils/lib/utils'
+const logger = new Logger('loginer');
 
 class UserLoginHandler extends Handler {
     noCheckPermView = true;
@@ -74,8 +76,7 @@ class UserLoginHandler extends Handler {
         }
         await udoc.checkPassword(password);
         await user.setById(udoc._id, { loginat: new Date(), loginip: this.request.ip });
-        let ndate = new Date();
-        console.log(ndate.toLocaleString("zh-cn",  { timeZone: "Asia/Shanghai" })," User:" ,udoc.uname, "login at:",this.request.ip);
+        logger.info('User: %s login at: %s' ,udoc.uname, this.request.ip);
         if (!udoc.hasPriv(PRIV.PRIV_USER_PROFILE)) throw new BlacklistedError(uname, udoc.banReason);
         this.context.HydroContext.user = udoc;
         this.session.viewLang = '';
@@ -275,8 +276,8 @@ class UserRegisterWithCodeHandler extends Handler {
         if (this.tdoc.oauth?.[0] && global.Hydro.module.oauth[this.tdoc.oauth[0]].lockUsername) {
             uname = this.tdoc.username;
         }
+        if (uname.length<6 || /^[0-9]+$/.test(uname)===false) throw new ValidationError('uname');
         if (!Types.Username[1](uname)) throw new ValidationError('uname');
-        if (isNaN(Number(uname))) throw new ValidationError('StudentId');
         if (school.length<4) throw new ValidationError('school');
         if (realname.length<2) throw new ValidationError('realname');
         if (password !== verify) throw new VerifyPasswordError();
