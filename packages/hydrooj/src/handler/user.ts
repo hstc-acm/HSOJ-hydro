@@ -27,7 +27,7 @@ import {
     Handler, param, post, Types,
 } from '../service/server';
 import { Logger } from '@hydrooj/utils/lib/utils';
-const logger = new Logger('loginer');
+const logger = new Logger('server');
 
 class UserLoginHandler extends Handler {
     noCheckPermView = true;
@@ -76,7 +76,7 @@ class UserLoginHandler extends Handler {
         }
         await udoc.checkPassword(password);
         await user.setById(udoc._id, { loginat: new Date(), loginip: this.request.ip });
-        logger.info('User: %s login at: %s' ,udoc.uname, this.request.ip);
+        logger.warn('LoginInfo: User: %s login at: %s' ,udoc.uname, this.request.ip);
         if (!udoc.hasPriv(PRIV.PRIV_USER_PROFILE)) throw new BlacklistedError(uname, udoc.banReason);
         this.context.HydroContext.user = udoc;
         this.session.viewLang = '';
