@@ -26,7 +26,7 @@ import user, { deleteUserCache } from '../model/user';
 import {
     Handler, param, post, Types,
 } from '../service/server';
-import { Logger } from '@hydrooj/utils/lib/utils'
+import { Logger } from '@hydrooj/utils/lib/utils';
 const logger = new Logger('loginer');
 
 class UserLoginHandler extends Handler {
