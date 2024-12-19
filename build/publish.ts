@@ -44,7 +44,7 @@ const tag = 'yuuka';
         for (const name in bumpMap) {
             console.log(`publishing ${name}@${bumpMap[name]} ...`);
             if (tag === 'yuuka') {
-                const pkg = require(`${name}/package.json`);
+                const pkg = require(path.resolve(`${name}/package.json`));
                 pkg.version += '-yuuka';
                 writeFileSync(path.resolve(`${name}/package.json`), JSON.stringify(pkg));
             }
