@@ -34,7 +34,7 @@ const tag = 'yuuka';
         for (const name in bumpMap) {
             console.log(`tagging ${name}@${bumpMap[name]} ...`);
             const pkg = require(path.resolve(`${name}/package.json`));
-            pkg.version += '-yuuka';
+            pkg.version = '10'+ pkg.version;
             pkg.author = 'Tsukiyuki Miyako';
             pkg.repository = 'https://github.com/hstc-acm/HSOJ-hydro';
             writeFileSync(path.resolve(`${name}/package.json`), JSON.stringify(pkg));
