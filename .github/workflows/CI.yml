@@ -60,6 +60,7 @@ jobs:
             .github/workflows/**
       - name: Build
         run: |
+          node -r @hydrooj/register build/tagger.ts
           if [[ ${{ steps.ui-changed-files.outputs.any_changed }} == true ]] || [[ ${{ env.BUILD_UI }} == 'true' ]]
           then
             yarn build:ui:iconfont
@@ -68,4 +69,4 @@ jobs:
             parallel --tty -j+0 yarn ::: build
           fi
       - name: Publish
-        run: node -r @hydrooj/register build/publish.ts
+        run: yarn workspaces foreach -A npm publish --access public --tag yuuka

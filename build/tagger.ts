@@ -1,11 +1,9 @@
-/* eslint-disable no-await-in-loop */
-/* eslint-disable import/no-dynamic-require */
 import { writeFileSync } from 'fs';
 import path from 'path';
 import ora from 'ora';
 import packageJson from 'package-json';
 import { gt } from 'semver';
-import { getWorkspaces, spawnAsync } from './utils';
+import { getWorkspaces } from './utils';
 
 const tag = 'yuuka';
 
@@ -34,12 +32,16 @@ const tag = 'yuuka';
 
     if (Object.keys(bumpMap).length) {
         for (const name in bumpMap) {
-            console.log(`publishing ${name}@${bumpMap[name]} ...`);
-            await spawnAsync(
-                `yarn npm publish --access public --tag ${tag}`,
-                path.resolve(name),
-            );
+            console.log(`tagging ${name}@${bumpMap[name]} ...`);
+            const pkg = require(path.resolve(`${name}/package.json`));
+            pkg.version += '-yuuka';
+            pkg.author = 'Tsukiyuki Miyako';
+            pkg.repository = 'https://github.com/hstc-acm/HSOJ-hydro';
+            writeFileSync(path.resolve(`${name}/package.json`), JSON.stringify(pkg));
         }
     }
-    console.log('Release created successfully.');
+    const spacepkg = require(`../package.json`);
+    spacepkg.private = false;
+    writeFileSync(path.resolve(`package.json`), JSON.stringify(spacepkg));
+    console.log('Tagged successfully.');
 })();
