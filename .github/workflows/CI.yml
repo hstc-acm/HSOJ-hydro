@@ -69,4 +69,4 @@ jobs:
             parallel --tty -j+0 yarn ::: build
           fi
       - name: Publish
-        run: yarn workspaces foreach -A npm publish --access public --tag yuuka
+        run: yarn workspaces foreach -A npm publish --access public --tag latest

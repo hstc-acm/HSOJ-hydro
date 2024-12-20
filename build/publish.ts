@@ -7,7 +7,7 @@ import packageJson from 'package-json';
 import { gt } from 'semver';
 import { getWorkspaces, spawnAsync } from './utils';
 
-const tag = 'yuuka';
+const tag = 'latest';
 
 (async () => {
     let folders = await getWorkspaces();
