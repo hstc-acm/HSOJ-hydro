@@ -7,7 +7,7 @@
         "cordis": "*"
     },
     "dependencies": {
-        "@hydrooj/utils": "workspace:^",
+        "@hydrooj/utils": "workspace:",
         "emoji-regex": "^10.4.0",
         "fs-extra": "^11.2.0",
         "koa": "^2.15.3",
