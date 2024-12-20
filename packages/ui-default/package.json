@@ -24,7 +24,7 @@
     "@fontsource/roboto-mono": "^5.1.0",
     "@fontsource/source-code-pro": "^5.1.0",
     "@fontsource/ubuntu-mono": "^5.1.0",
-    "@hydrooj/utils": "workspace:=",
+    "@hydrooj/utils": "workspace:*",
     "@sentry/browser": "^8.45.0",
     "@sentry/webpack-plugin": "^2.22.7",
     "@simplewebauthn/browser": "9.0.1",

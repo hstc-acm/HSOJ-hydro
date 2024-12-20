@@ -8,7 +8,7 @@
     "license": "AGPL-3.0-or-later",
     "preferUnplugged": true,
     "dependencies": {
-        "@hydrooj/utils": "workspace:=",
+        "@hydrooj/utils": "workspace:*",
         "jsdom": "^25.0.1",
         "superagent-charset": "^1.2.0",
         "superagent-proxy": "^3.0.0"
