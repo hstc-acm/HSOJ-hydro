@@ -12,9 +12,9 @@ services:
       - MONGODB_DATABASE=hydro
     volumes:
       - ./mongodb-data:/bitnami/mongodb
-  hydro:
+  oj-backend:
     image: hsoj-hydro:latest
-    privileged: true
+    container_name: oj-backend
     ports:
       - 8888:8888
     depends_on:
@@ -27,3 +27,12 @@ services:
     volumes:
       - ./hydro:/root/.hydro
       - ./testdata:/data/file
+  oj-judge:
+    image: hsoj-hydro:latest
+    container_name: oj-judge
+    restart: always
+    privileged: true
+    depends_on:
+      - oj-backend
+    volumes:
+      - ./data/judge:/root/.config/hydro
