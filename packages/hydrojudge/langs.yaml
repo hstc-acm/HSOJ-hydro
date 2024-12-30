@@ -14,19 +14,11 @@ java:
 py3:
     compile: /usr/bin/python3 -c "import py_compile; py_compile.compile('/w/foo.py', '/w/foo', doraise=True)"
     code_file: foo.py
+    time_limit_rate: 2
     execute: /usr/bin/python3 foo
-php:
-    execute: /usr/bin/php foo.php
 rs:
     compile: /usr/bin/rustc -O -o /w/foo /w/foo.rs
-hs:
-    compile: /usr/bin/ghc -O -outputdir /tmp -o /w/foo /w/foo.hs
 js:
     execute: /usr/bin/jsc foo.js
 go:
     compile: /usr/bin/go build -o /w/foo /w/foo.go
-rb:
-    execute: /usr/bin/ruby foo.rb
-cs:
-    compile: /usr/bin/mcs csc -optimize+ -out:/w/foo.exe /w/foo.cs
-    execute: /usr/bin/mono foo.exe
