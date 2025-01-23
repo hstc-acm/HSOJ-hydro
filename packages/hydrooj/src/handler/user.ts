@@ -276,10 +276,10 @@ class UserRegisterWithCodeHandler extends Handler {
         if (this.tdoc.oauth?.[0] && global.Hydro.module.oauth[this.tdoc.oauth[0]].lockUsername) {
             uname = this.tdoc.username;
         }
-        if (uname.length<6 || /^[0-9]+$/.test(uname)===false) throw new ValidationError('uname');
+        if (uname.length<6 || uname.length>12 || /^[0-9]+$/.test(uname)===false) throw new ValidationError('uname');
         if (!Types.Username[1](uname)) throw new ValidationError('uname');
-        if (school.length<4) throw new ValidationError('school');
-        if (realname.length<2) throw new ValidationError('realname');
+        if (school.length<4 || /^[\u4e00-\u9fa5]+$/.test(school)===false) throw new ValidationError('school');
+        if (realname.length<2 || /^[\u4e00-\u9fa5]+$/.test(realname)===false) throw new ValidationError('realname');
         if (password !== verify) throw new VerifyPasswordError();
         if (this.tdoc.phone) this.tdoc.mail = `${String.random(12)}@hydro.local`;
         const uid = await user.create(this.tdoc.mail, uname, password, undefined, this.request.ip);
