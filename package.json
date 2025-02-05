@@ -53,16 +53,12 @@
         "inspectpack": "^4.7.1",
         "mongodb-memory-server": "9.4.1",
         "nyc": "^17.1.0",
-        "ora": "^8.1.1",
+        "ora": "^8.2.0",
         "package-json": "^10.0.1",
-        "semver": "^7.6.3",
+        "semver": "^7.7.1",
         "simple-git": "^3.27.0",
         "supertest": "^7.0.0",
         "typescript": "5.7.2",
         "wtfnode": "^0.10.0"
-    },
-    "resolutions": {
-        "cosmokit": "1.6.3",
-        "monaco-editor": "0.50.0"
     }
 }
