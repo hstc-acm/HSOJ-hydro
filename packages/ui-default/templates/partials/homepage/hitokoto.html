@@ -4,7 +4,9 @@
   </div>
   <div class="section__body typo">
     <script>
-        setInterval("document.getElementById('datetime').innerHTML=new Date().toLocaleString();", 1000);
+        window.onload = function () {
+            setInterval("document.getElementById('datetime').innerHTML=new Date().toLocaleString();", 1000);
+        }
     </script>
   </div>
 </div>
