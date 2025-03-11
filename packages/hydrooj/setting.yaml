@@ -121,11 +121,21 @@ langs:
       display: Kotlin/JVM
       compile_time_limit: 30000
       version: /usr/bin/kotlinc -version
-    py3:
+    py:
+      compile: /usr/bin/python -c "import py_compile; py_compile.compile('/w/foo.py', '/w/foo', doraise=True)"
+      code_file: foo.py
+      execute: /usr/bin/python foo
+      time_limit_rate: 2
+      highlight: python
+      display: Python
+    py.py2:
+      display: Python 2
+      disabled: true
+    py.py3:
       compile: /usr/bin/python3 -c "import py_compile; py_compile.compile('/w/foo.py', '/w/foo', doraise=True)"
       execute: /usr/bin/python3 foo
-      time_limit_rate: 2
       display: Python 3
+      time_limit_rate: 2
       version: /usr/bin/python3 --version
     rs:
       compile: /usr/bin/rustc -O -o /w/foo /w/foo.rs

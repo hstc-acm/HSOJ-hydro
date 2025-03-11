@@ -1,6 +1,7 @@
 import http from 'http';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { PassThrough } from 'stream';
 import { Context, Service } from 'cordis';
 import type { Files } from 'formidable';
 import fs from 'fs-extra';
@@ -8,7 +9,7 @@ import Koa from 'koa';
 import Body from 'koa-body';
 import Compress from 'koa-compress';
 import { Shorty } from 'shorty.js';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import {
     Counter, errorMessage, isClass, Logger, parseMemoryMB,
 } from '@hydrooj/utils/lib/utils';
@@ -72,7 +73,6 @@ export interface HydroResponse {
     attachment: (name: string, stream?: any) => void;
     addHeader: (name: string, value: string) => void;
 }
-export type RendererFunction = (name: string, context: Record<string, any>) => string | Promise<string>;
 type HydroContext = {
     request: HydroRequest;
     response: HydroResponse;
@@ -87,6 +87,21 @@ export type KoaContext = Koa.Context & {
     request: Koa.Request & { body: any, files: Files };
     session: Record<string, any>;
     holdFiles: (string | File)[];
+};
+
+export type TextRenderer = {
+    output: 'html' | 'json' | 'text';
+    render: (name: string, args: Record<string, any>, context: Record<string, any>) => string | Promise<string>;
+};
+export type BinaryRenderer = {
+    output: 'binary';
+    render: (name: string, args: Record<string, any>, context: Record<string, any>) => Buffer | Promise<Buffer>;
+};
+export type Renderer = (BinaryRenderer | TextRenderer) & {
+    name: string;
+    accept: readonly string[];
+    priority: number;
+    asFallback: boolean;
 };
 
 const logger = new Logger('server');
@@ -169,14 +184,14 @@ export class HandlerCommon {
     }
 
     renderHTML(templateName: string, args: Record<string, any>) {
-        const type = templateName.split('.')[1];
-        const engine = this.ctx.server.renderers[type] || (() => JSON.stringify(args, serializer(false, this)));
-        return engine(templateName, {
+        const renderers = Object.values(this.ctx.server.renderers).filter((r) => r.accept.includes(templateName) || r.asFallback);
+        const topPrio = renderers.sort((a, b) => b.priority - a.priority)[0];
+        const engine = topPrio?.render || (() => JSON.stringify(args, serializer(false, this)));
+        return engine(templateName, args, {
             handler: this,
             UserContext: this.user,
             url: this.url,
             _: this.translate,
-            ...args,
         });
     }
 }
@@ -337,7 +352,7 @@ export class WebService extends Service {
     private wsLayers = [];
     private captureAllRoutes = Object.create(null);
 
-    renderers: Record<string, RendererFunction> = Object.create(null);
+    renderers: Record<string, Renderer> = Object.create(null);
     server = koa;
     router = router;
     HandlerCommon = HandlerCommon;
@@ -345,7 +360,7 @@ export class WebService extends Service {
     ConnectionHandler = ConnectionHandler;
 
     constructor(ctx: Context, public config: WebServiceConfig) {
-        super(ctx, 'server', true);
+        super(ctx, 'server');
         ctx.mixin('server', ['Route', 'Connection', 'withHandlerClass']);
         this.server.keys = this.config.keys;
         this.server.proxy = this.config.proxy;
@@ -353,13 +368,17 @@ export class WebService extends Service {
         this.server.use(Compress());
         this.server.use(async (c, next) => {
             if (c.request.headers.origin && this.config.cors) {
-                const host = new URL(c.request.headers.origin).host;
-                if (host !== c.request.headers.host && `,${this.config.cors},`.includes(`,${host},`)) {
-                    c.set('Access-Control-Allow-Credentials', 'true');
-                    c.set('Access-Control-Allow-Origin', c.request.headers.origin);
-                    c.set('Access-Control-Allow-Headers', corsAllowHeaders);
-                    c.set('Vary', 'Origin');
-                    c.cors = true;
+                try {
+                    const host = new URL(c.request.headers.origin).host;
+                    if (host !== c.request.headers.host && `,${this.config.cors},`.includes(`,${host},`)) {
+                        c.set('Access-Control-Allow-Credentials', 'true');
+                        c.set('Access-Control-Allow-Origin', c.request.headers.origin);
+                        c.set('Access-Control-Allow-Headers', corsAllowHeaders);
+                        c.set('Vary', 'Origin');
+                        c.cors = true;
+                    }
+                } catch (e) {
+                    // invalid origin header, ignore
                 }
             }
             if (c.request.method.toLowerCase() === 'options') {
@@ -378,7 +397,7 @@ export class WebService extends Service {
                     await next();
                 } finally {
                     const endTime = Date.now();
-                    if (!(c.nolog || c.response.headers.nolog)) {
+                    if (!c.nolog && !c.response.headers.nolog) {
                         logger.debug(`${c.request.method} /${c.domainId || 'system'}${c.request.path} \
 ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
                     }
@@ -547,10 +566,33 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         }
     }
 
-    private async handleWS(ctx: KoaContext, HandlerClass, checker, conn, layer) {
+    private async handleWS(ctx: KoaContext, HandlerClass, checker, conn, layer?) {
         const { args } = ctx.HydroContext;
         const h = new HandlerClass(ctx, this.ctx);
         await this.ctx.parallel('connection/create', h);
+        const stream = new PassThrough();
+        if (!conn) {
+            // By HTTP
+            ctx.request.socket.setTimeout(0);
+            ctx.req.socket.setNoDelay(true);
+            ctx.req.socket.setKeepAlive(true);
+            ctx.set({
+                'X-Accel-Buffering': 'no',
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                Connection: 'keep-alive',
+            });
+            ctx.HydroContext.request.websocket = true;
+            ctx.compress = false;
+            conn = {
+                close() {
+                    stream.end();
+                },
+                send(data: any) {
+                    stream.write(`${args.sse ? 'data: ' : ''}${data}\n${args.sse ? '\n' : ''}`);
+                },
+            };
+        }
         ctx.handler = h;
         h.conn = conn;
         const disposables = [];
@@ -562,54 +604,59 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             if (h.prepare) await h.prepare(args);
             // eslint-disable-next-line @typescript-eslint/no-shadow
             for (const { name, target } of h.__subscribe || []) disposables.push(this.ctx.on(name, target.bind(h)));
-            let lastHeartbeat = Date.now();
             let closed = false;
             let interval: NodeJS.Timeout;
             const clean = () => {
                 if (closed) return;
                 closed = true;
                 this.ctx.emit('connection/close', h);
-                layer.clients.delete(conn);
+                if (layer) layer.clients.delete(conn);
                 if (interval) clearInterval(interval);
                 for (const d of disposables) d();
                 h.cleanup?.(args);
             };
-            interval = setInterval(() => {
-                if (Date.now() - lastHeartbeat > 80000) {
-                    clean();
-                    conn.terminate();
-                }
-                if (Date.now() - lastHeartbeat > 30000) conn.send('ping');
-            }, 40000);
-            conn.on('pong', () => {
-                lastHeartbeat = Date.now();
-            });
-            conn.onmessage = (e) => {
-                lastHeartbeat = Date.now();
-                if (e.data === 'pong') return;
-                if (e.data === 'ping') {
-                    conn.send('pong');
-                    return;
-                }
-                let payload;
-                try {
-                    payload = JSON.parse(e.data.toString());
-                } catch {
-                    conn.close();
-                }
-                try {
-                    h.message?.(payload);
-                } catch (err) {
-                    logger.error(e);
-                }
-            };
+            if (layer) {
+                let lastHeartbeat = Date.now();
+                interval = setInterval(() => {
+                    if (Date.now() - lastHeartbeat > 80000) {
+                        clean();
+                        conn.terminate();
+                    }
+                    if (Date.now() - lastHeartbeat > 30000) conn.send('ping');
+                }, 40000);
+                conn.on('pong', () => {
+                    lastHeartbeat = Date.now();
+                });
+                conn.onmessage = (e) => {
+                    lastHeartbeat = Date.now();
+                    if (e.data === 'pong') return;
+                    if (e.data === 'ping') {
+                        conn.send('pong');
+                        return;
+                    }
+                    let payload;
+                    try {
+                        payload = JSON.parse(e.data.toString());
+                    } catch {
+                        conn.close();
+                    }
+                    try {
+                        h.message?.(payload);
+                    } catch (err) {
+                        logger.error(e);
+                    }
+                };
+            } else ctx.body = stream;
             await this.ctx.parallel('connection/active', h);
-            if (conn.readyState === conn.OPEN) {
-                conn.on('close', clean);
-                conn.resume();
-            } else clean();
+            if (layer) {
+                if (conn.readyState === conn.OPEN) {
+                    conn.on('close', clean);
+                    conn.resume();
+                } else clean();
+            } else stream.on('close', clean);
         } catch (e) {
             await h.onerror(e);
+            if (!layer) ctx.status = 500;
         }
     }
 
@@ -628,6 +675,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
             const layer = router.ws(path, async (conn, _req, ctx) => {
                 await this.handleWS(ctx as any, HandlerClass, checker, conn, layer);
             });
+            router.get(path, (ctx) => this.handleWS(ctx as any, HandlerClass, checker, null, null));
         }
         const dispose = router.disposeLastOp;
         // @ts-ignore
@@ -696,7 +744,7 @@ ${c.response.status} ${endTime - startTime}ms ${c.response.length}`);
         }
     }
 
-    public registerRenderer(name: string, func: RendererFunction) {
+    public registerRenderer(name: string, func: Renderer) {
         if (this.renderers[name]) logger.warn('Renderer %s already exists.', name);
         this.ctx.effect(() => {
             this.renderers[name] = func;
