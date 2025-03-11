@@ -4,8 +4,8 @@ import * as cordis from 'cordis';
 import yaml from 'js-yaml';
 import { Dictionary } from 'lodash';
 import moment from 'moment-timezone';
-import { LangConfig, parseLang } from '@hydrooj/utils/lib/lang';
-import { retry } from '@hydrooj/utils/lib/utils';
+import { LangConfig, parseLang } from '@hydrooj/common';
+import { retry } from '@hydrooj/utils';
 import { Context, Service } from '../context';
 import { Setting as _Setting } from '../interface';
 import { Logger } from '../logger';
@@ -24,6 +24,7 @@ const timezones = Array.from(tzs).sort().map((tz) => [tz, tz]) as [string, strin
 const langRange: Dictionary<string> = {};
 
 for (const lang in global.Hydro.locales) {
+    if (!global.Hydro.locales[lang].__interface) continue;
     langRange[lang] = global.Hydro.locales[lang].__langname;
 }
 
@@ -315,7 +316,7 @@ export class SettingService extends Service {
     DomainUserSetting = T(DomainUserSetting);
     SystemSetting = T(SystemSetting);
     constructor(ctx: Context) {
-        super(ctx, 'setting', true);
+        super(ctx, 'setting');
     }
 
     get(key: string) {

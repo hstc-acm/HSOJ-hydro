@@ -48,6 +48,20 @@ const problemConfigSchema: JSONSchema7 = {
         },
       },
     },
+    compilableFile: {
+      oneOf: [
+        { type: 'string', pattern: '\\.' },
+        {
+          type: 'object',
+          properties: {
+            file: { type: 'string', pattern: '\\.' },
+            lang: { type: 'string' },
+          },
+          required: ['file', 'lang'],
+          additionalProperties: false,
+        },
+      ],
+    },
   },
   properties: {
     redirect: { type: 'string', pattern: '[0-9a-zA-Z_-]+\\/[0-9]+' },
@@ -56,17 +70,17 @@ const problemConfigSchema: JSONSchema7 = {
     subType: { type: 'string' },
     langs: { type: 'array', items: { type: 'string' } },
     target: { type: 'string' },
-    checker_type: { enum: ['default', 'lemon', 'syzoj', 'hustoj', 'testlib', 'strict', 'qduoj'] },
+    checker_type: { enum: ['default', 'lemon', 'syzoj', 'hustoj', 'testlib', 'strict', 'qduoj', 'kattis'] },
     checker: {
       oneOf: [
-        { type: 'string', pattern: '\\.' },
         { type: 'string', enum: testlibCheckers },
+        { $ref: '#/definitions/compilableFile' },
       ],
     },
-    interactor: { type: 'string', pattern: '\\.' },
-    manager: { type: 'string', pattern: '\\.' },
+    interactor: { $ref: '#/definitions/compilableFile' },
+    manager: { $ref: '#/definitions/compilableFile' },
     num_processes: { type: 'number', minimum: 1, maximum: 5 },
-    validator: { type: 'string', pattern: '\\.' },
+    validator: { $ref: '#/definitions/compilableFile' },
     user_extra_files: { type: 'array', items: { type: 'string' } },
     judge_extra_files: { type: 'array', items: { type: 'string' } },
     cases: { $ref: '#/definitions/cases' },

@@ -2,12 +2,53 @@
 /* eslint-disable consistent-return */
 /* eslint-disable import/no-dynamic-require */
 /* eslint-disable @typescript-eslint/no-shadow */
-import { relative, resolve, sep } from 'path';
-import { FSWatcher, watch } from 'chokidar';
-import { debounce } from 'lodash';
-import { Context, MainScope, Service } from '../context';
+import { readFileSync } from 'fs';
+import { relative } from 'path';
+import { codeFrameColumns } from '@babel/code-frame';
+import { BuildFailure } from 'esbuild';
+import { Context, Plugin, Service } from '../context';
 import { Logger } from '../logger';
 import { unwrapExports } from '../utils';
+
+declare module '../context' {
+    interface Events {
+        'hmr/reload': (reloads: Map<Plugin, { filename: string, runtime: Plugin.Runtime<Context> }>) => void;
+    }
+    interface Context {
+        hmr: HMR;
+    }
+}
+
+function isBuildFailure(e: any): e is BuildFailure {
+    return Array.isArray(e?.errors) && e.errors.every((error: any) => error.text);
+}
+
+export function handleError(ctx: Context, e: any) {
+    if (!isBuildFailure(e)) {
+        ctx.logger.warn(e);
+        return;
+    }
+
+    for (const error of e.errors) {
+        if (!error.location) {
+            ctx.logger.warn(error.text);
+            continue;
+        }
+        try {
+            const { file, line, column } = error.location;
+            const source = readFileSync(file, 'utf8');
+            const formatted = codeFrameColumns(source, {
+                start: { line, column },
+            }, {
+                highlightCode: true,
+                message: error.text,
+            });
+            ctx.logger.warn(`File: ${file}:${line}:${column}\n${formatted}`);
+        } catch (e) {
+            ctx.logger.warn(e);
+        }
+    }
+}
 
 function loadDependencies(filename: string, ignored: Set<string>) {
     const dependencies = new Set<string>();
@@ -20,66 +61,30 @@ function loadDependencies(filename: string, ignored: Set<string>) {
     return dependencies;
 }
 
-const logger = new Logger('watch');
+const logger = new Logger('hmr');
 
-function coerce(val: any) {
-    // resolve error when stack is undefined, e.g. axios error with status code 401
-    const { message, stack } = val instanceof Error && val.stack ? val : new Error(val as any);
-    const lines = stack.split('\n');
-    const index = lines.findIndex((line) => line.endsWith(message));
-    return lines.slice(index).join('\n');
-}
-
-export default class Watcher extends Service {
-    private root: string;
-    private watcher: FSWatcher;
+export default class HMR extends Service {
+    private root = process.cwd();
     private externals: Set<string>;
     private accepted: Set<string>;
     private declined: Set<string>;
     private stashed = new Set<string>();
 
-    constructor(public ctx: Context) {
-        super(ctx, 'watcher', true);
+    constructor(public ctx: Context, config: { watch: boolean }) {
+        super(ctx, 'hmr');
         this.externals = new Set(Object.keys(require.cache));
-    }
-
-    start() {
-        this.root = resolve(process.cwd());
-        const roots = [this.root];
-        if (process.env.WATCH_ROOT) roots.push(process.env.WATCH_ROOT);
-        this.watcher = watch(roots, {
-            ...this.config,
-            ignored: (file) => [
-                'node_modules', '.git', 'logs', '.cache', '.yarn', 'tsconfig.tsbuildinfo',
-            ].some((rule) => file.startsWith(`${rule}/`) || file.endsWith(`/${rule}`) || file.includes(`/${rule}/`)),
-        });
-        logger.info(`Start watching changes in ${this.root}`);
-
-        // files independent from any plugins will trigger a full reload
-        const triggerLocalReload = debounce(() => this.triggerLocalReload(), 1000);
-
-        this.watcher.on('change', (path) => {
-            if (path.includes(`${sep}.`)) return;
-            logger.debug('change detected:', relative(this.root, path));
-            this.ctx.emit('app/watch/change', path);
-
+        const debouncedReload = ctx.debounce(() => this.triggerLocalReload(), 1000);
+        this.ctx.on('app/watch/change', (path) => {
             if (this.externals.has(path)) {
                 logger.warn('Require full reload');
             } else if (require.cache[path]) {
                 this.stashed.add(path);
                 this.ctx.emit('app/before-reload', this.stashed);
-                triggerLocalReload();
+                debouncedReload();
                 this.ctx.emit('app/reload', this.stashed);
             }
         });
-        this.watcher.on('unlink', (path) => {
-            logger.debug('change detected:', `-${relative(this.root, path)}`);
-            this.ctx.emit('app/watch/unlink', path);
-        });
-    }
-
-    stop() {
-        return this.watcher.close();
+        if (config.watch) ctx.plugin(require('./watch'));
     }
 
     private analyzeChanges() {
@@ -140,25 +145,24 @@ export default class Watcher extends Service {
     }
 
     private triggerLocalReload() {
-        const start = Date.now();
         this.analyzeChanges();
 
         /** plugins pending classification */
-        const pending = new Map<string, MainScope>();
+        const pending = new Map<string, Plugin.Runtime<Context>>();
 
         /** plugins that should be reloaded */
-        const reloads = new Map<MainScope, string>();
+        const reloads = new Map<Plugin, { filename: string, runtime: Plugin.Runtime<Context> }>();
 
         // we assume that plugin entry files are "atomic"
         // that is, reloading them will not cause any other reloads
         for (const filename in require.cache) {
             const module = require.cache[filename];
             const plugin = unwrapExports(module.exports);
-            if (!(typeof plugin === 'object' && plugin && 'apply' in plugin)) continue;
+            if (typeof plugin !== 'object' || !plugin || !('apply' in plugin)) continue;
             const runtime = this.ctx.registry.get(plugin);
             if (!runtime || this.declined.has(filename)) continue;
             pending.set(filename, runtime);
-            if (!(plugin && 'sideEffect' in plugin && plugin['sideEffect'])) this.declined.add(filename);
+            if (!plugin || !('sideEffect' in plugin) || !plugin['sideEffect']) this.declined.add(filename);
         }
 
         for (const [filename, runtime] of pending) {
@@ -173,25 +177,13 @@ export default class Watcher extends Service {
             for (const dep of dependencies) this.accepted.add(dep);
 
             // prepare for reload
-            let isMarked = false;
-            const visited = new Set<MainScope>();
-            const queued = [runtime];
-            while (queued.length) {
-                const runtime = queued.shift();
-                if (visited.has(runtime)) continue;
-                visited.add(runtime);
-                if (reloads.has(runtime)) {
-                    isMarked = true;
-                    break;
-                }
-                for (const state of runtime.children) {
-                    queued.push(state.runtime);
-                }
-            }
-            if (!isMarked) reloads.set(runtime, filename);
+            reloads.set(runtime.plugin, {
+                filename,
+                runtime,
+            });
         }
 
-        const backup: Record<string, NodeJS.Module> = {};
+        const backup: Record<string, NodeJS.Module> = Object.create(null);
         for (const filename of this.accepted) {
             backup[filename] = require.cache[filename];
             delete require.cache[filename];
@@ -204,54 +196,61 @@ export default class Watcher extends Service {
         }
 
         logger.debug('Will reload the following file(s): %o', this.accepted.keys());
-        const attempts = {};
+        const attempts: Record<string, any> = {};
         try {
-            for (const [, filename] of reloads) {
+            for (const [, { filename }] of reloads) {
                 attempts[filename] = unwrapExports(require(filename));
             }
-        } catch (err) {
-            logger.warn(err);
+        } catch (e) {
+            handleError(this.ctx, e);
             return rollback();
         }
 
+        const reload = (plugin: any, runtime?: Plugin.Runtime) => {
+            if (!runtime) return;
+            for (const oldFiber of runtime.scopes) {
+                oldFiber.parent.plugin(plugin, oldFiber.config);
+            }
+        };
+
         try {
-            for (const [runtime, filename] of reloads) {
+            for (const [plugin, { filename, runtime }] of reloads) {
                 const path = relative(this.root, filename);
-                const states = runtime.children.slice();
 
                 try {
-                    this.ctx.registry.delete(runtime.plugin);
+                    this.ctx.registry.delete(plugin);
                 } catch (err) {
-                    logger.warn(`failed to dispose plugin at %c\n${coerce(err)}`, path);
+                    logger.warn('failed to dispose plugin at %c', path);
+                    logger.warn(err);
                 }
 
                 try {
-                    const plugin = attempts[filename];
-                    for (const state of states) {
-                        state.parent.plugin(plugin, state.config);
-                    }
+                    reload(attempts[filename], runtime);
+                    logger.info('reload plugin at %c', path);
                 } catch (err) {
-                    logger.warn(`failed to reload plugin at %c\n${coerce(err)}`, path);
+                    logger.warn('failed to reload plugin at %c', path);
+                    logger.warn(err);
                     throw err;
                 }
             }
         } catch {
             // rollback require.cache and plugin states
             rollback();
-            for (const [runtime, filename] of reloads) {
+            for (const [plugin, { filename, runtime }] of reloads) {
                 try {
                     this.ctx.registry.delete(attempts[filename]);
-                    runtime.parent.plugin(runtime.plugin, runtime.config);
+                    reload(plugin, runtime);
                 } catch (err) {
                     logger.warn(err);
                 }
             }
-            logger.warn('Rolling back changes');
             return;
         }
 
+        // emit reload event on success
+        this.ctx.emit('hmr/reload', reloads);
+
         // reset stashed files
         this.stashed = new Set();
-        logger.success('Reload done in %d ms', Date.now() - start);
     }
 }

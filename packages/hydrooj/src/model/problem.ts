@@ -8,11 +8,12 @@ import yaml from 'js-yaml';
 import { pick } from 'lodash';
 import { Filter, ObjectId } from 'mongodb';
 import type { Readable } from 'stream';
+import { ProblemConfigFile } from '@hydrooj/common';
 import { Logger, size, streamToBuffer } from '@hydrooj/utils/lib/utils';
 import { Context } from '../context';
 import { FileUploadError, ProblemNotFoundError, ValidationError } from '../error';
 import type {
-    Document, ProblemConfigFile, ProblemDict, ProblemStatusDoc, User,
+    Document, ProblemDict, ProblemStatusDoc, User,
 } from '../interface';
 import { parseConfig } from '../lib/testdataConfig';
 import * as bus from '../service/bus';
@@ -395,7 +396,7 @@ export class ProblemModel {
         // TODO enhance
         if (pdocs.length !== pids.length) {
             for (const pid of pids) {
-                if (!(r[pid] || l[pid])) {
+                if (!r[pid] && !l[pid]) {
                     if (doThrow) throw new ProblemNotFoundError(domainId, pid);
                     if (!indexByDocIdOnly) r[pid] = { ...ProblemModel.default, domainId, pid: pid.toString() };
                 }

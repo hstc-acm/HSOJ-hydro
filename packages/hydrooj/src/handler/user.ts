@@ -1,4 +1,5 @@
 import { generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
+import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import moment from 'moment-timezone';
 import type { Binary } from 'mongodb';
 import type { Context } from '../context';
@@ -147,8 +148,7 @@ class UserWebauthnHandler extends Handler {
         if (!udoc.authn) throw new AuthOperationError('authn', 'disabled');
         const options = await generateAuthenticationOptions({
             allowCredentials: udoc._authenticators.map((authenticator) => ({
-                id: authenticator.credentialID.buffer,
-                type: 'public-key',
+                id: isoBase64URL.fromBuffer(authenticator.credentialID.buffer),
             })),
             rpID: this.getAuthnHost(),
             userVerification: 'preferred',
@@ -172,10 +172,10 @@ class UserWebauthnHandler extends Handler {
             expectedChallenge: challenge,
             expectedOrigin: this.request.headers.origin,
             expectedRPID: this.getAuthnHost(),
-            authenticator: {
+            credential: {
                 ...authenticator,
-                credentialID: authenticator.credentialID.buffer,
-                credentialPublicKey: authenticator.credentialPublicKey.buffer,
+                id: isoBase64URL.fromBuffer(authenticator.credentialID.buffer),
+                publicKey: authenticator.credentialPublicKey.buffer,
             },
         }).catch(() => null);
         if (!verification?.verified) throw new ValidationError('authenticator');
@@ -236,7 +236,7 @@ export class UserRegisterHandler extends Handler {
                 path: `/register/${t[0]}`,
                 url_prefix: prefix.endsWith('/') ? prefix.slice(0, -1) : prefix,
             });
-            await sendMail(mail, 'Sign Up', 'user_register_mail', m);
+            await sendMail(mail, 'Sign Up', 'user_register_mail', m.toString());
             this.response.template = 'user_register_mail_sent.html';
             this.response.body = { mail };
         } else this.response.redirect = this.url('user_register_with_code', { code: t[0] });
@@ -338,7 +338,7 @@ class UserLostPassHandler extends Handler {
             url_prefix: prefix.endsWith('/') ? prefix.slice(0, -1) : prefix,
             uname: udoc.uname,
         });
-        await sendMail(mail, 'Lost Password', 'user_lostpass_mail', m);
+        await sendMail(mail, 'Lost Password', 'user_lostpass_mail', m.toString());
         this.response.template = 'user_lostpass_mail_sent.html';
     }
 }

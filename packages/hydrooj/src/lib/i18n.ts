@@ -20,7 +20,8 @@ declare global {
 
 class I18nService extends Service {
     constructor(ctx: Context) {
-        super(ctx, 'i18n', true);
+        super(ctx, 'i18n');
+        this.load('ja', { __flag: '🇯🇵', __id: 'ja', __langname: '日本語' });
     }
 
     load(lang: string, content: Record<string, string>) {
@@ -57,8 +58,11 @@ class I18nService extends Service {
     }
 }
 
-app.provide('i18n', undefined, true);
-app.i18n = new I18nService(app);
+export const name = 'i18n';
+export function apply(ctx: Context) {
+    ctx.provide('i18n', undefined, true);
+    ctx.i18n = new I18nService(ctx);
+}
 
 String.prototype.translate = function translate(...languages: string[]) {
     if (languages[0]?.startsWith('en')) {

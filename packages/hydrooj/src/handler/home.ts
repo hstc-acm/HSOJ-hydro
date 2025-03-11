@@ -1,5 +1,6 @@
 import path from 'path';
 import { generateRegistrationOptions, verifyRegistrationResponse } from '@simplewebauthn/server';
+import { isoBase64URL, isoUint8Array } from '@simplewebauthn/server/helpers';
 import yaml from 'js-yaml';
 import { pick } from 'lodash';
 import { Binary, ObjectId } from 'mongodb';
@@ -245,7 +246,7 @@ class HomeSecurityHandler extends Handler {
             uname: this.user.uname,
             url_prefix: prefix.endsWith('/') ? prefix.slice(0, -1) : prefix,
         });
-        await mail.sendMail(email, 'Change Email', 'user_changemail_mail', m);
+        await mail.sendMail(email, 'Change Email', 'user_changemail_mail', m.toString());
         this.response.template = 'user_changemail_mail_sent.html';
     }
 
@@ -288,12 +289,12 @@ class HomeSecurityHandler extends Handler {
         const options = await generateRegistrationOptions({
             rpName: system.get('server.name'),
             rpID: this.getAuthnHost(),
-            userID: this.user._id.toString(),
+            userID: isoUint8Array.fromUTF8String(this.user._id.toString()),
             userDisplayName: this.user.uname,
             userName: `${this.user.uname}(${this.user.mail})`,
             attestationType: 'direct',
             excludeCredentials: this.user._authenticators.map((c) => ({
-                id: c.credentialID.buffer,
+                id: isoBase64URL.fromBuffer(c.credentialID.buffer),
                 type: 'public-key',
             })),
             authenticatorSelection: {
@@ -316,12 +317,13 @@ class HomeSecurityHandler extends Handler {
         }).catch(() => { throw new ValidationError('verify'); });
         if (!verification.verified) throw new ValidationError('verify');
         const info = verification.registrationInfo;
-        const id = Buffer.from(info.credentialID);
+        const id = isoBase64URL.toBuffer(info.credential.id);
         if (this.user._authenticators.find((c) => c.credentialID.buffer.toString() === id.toString())) throw new ValidationError('authenticator');
         this.user._authenticators.push({
             ...info,
+            counter: info.credential.counter,
             credentialID: new Binary(id),
-            credentialPublicKey: new Binary(Buffer.from(info.credentialPublicKey)),
+            credentialPublicKey: new Binary(Buffer.from(info.credential.publicKey)),
             attestationObject: new Binary(Buffer.from(info.attestationObject)),
             name,
             regat: Date.now(),
