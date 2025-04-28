@@ -4,7 +4,7 @@ import { writeFileSync } from 'fs';
 import path from 'path';
 import ora from 'ora';
 import packageJson from 'package-json';
-import { gt } from 'semver';
+import { gt, prerelease } from 'semver';
 import { getWorkspaces, spawnAsync } from './utils';
 
 const tag = 'latest';
@@ -29,6 +29,7 @@ const tag = 'latest';
             console.error(e);
         }
         spinner.text = `Loading workspaces (${++progress}/${folders.length})`;
+        return progress;
     }));
     spinner.succeed();
 

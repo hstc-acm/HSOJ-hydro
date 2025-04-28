@@ -109,7 +109,7 @@ export class ProblemMainHandler extends Handler {
         // eslint-disable-next-line @typescript-eslint/no-shadow
         const query = this.queryContext.query;
         const psdict = {};
-        const search = global.Hydro.lib.problemSearch || defaultSearch;
+        const search = Object.values(global.Hydro.module.problemSearch)[0] || defaultSearch;
         const parsed = parser.parse(q, {
             keywords: ['category', 'difficulty', 'namespace'],
             offsets: false,
@@ -142,7 +142,6 @@ export class ProblemMainHandler extends Handler {
         }
         const sort = this.queryContext.sort;
         await this.ctx.parallel('problem/list', query, this, sort);
-        // eslint-disable-next-line prefer-const
         let [pdocs, ppcount, pcount] = this.queryContext.fail
             ? [[], 0, 0]
             : await this.paginate(
@@ -157,14 +156,10 @@ export class ProblemMainHandler extends Handler {
         if (sort.length) pdocs = pdocs.sort((a, b) => sort.indexOf(`${a.domainId}/${a.docId}`) - sort.indexOf(`${b.domainId}/${b.docId}`));
         if (text && pcount > pdocs.length) pcount = pdocs.length;
         if (this.user.hasPriv(PRIV.PRIV_USER_PROFILE)) {
-            const domainIds = Array.from(new Set(pdocs.map((i) => i.domainId)));
-            await Promise.all(
-                domainIds.map((did) =>
-                    problem.getListStatus(
-                        did, this.user._id,
-                        pdocs.filter((i) => i.domainId === did).map((i) => i.docId),
-                    ).then((res) => Object.assign(psdict, res))),
-            );
+            Object.assign(psdict, await problem.getListStatus(
+                domainId, this.user._id,
+                pdocs.map((i) => i.docId),
+            ));
         }
         if (pjax) {
             this.response.body = {
@@ -396,19 +391,21 @@ export class ProblemDetailHandler extends ContestDetailBaseHandler {
     @param('pid', Types.UnsignedInt)
     async postRejudge(domainId: string, pid: number) {
         this.checkPerm(PERM.PERM_REJUDGE_PROBLEM);
+        if (!this.pdoc.config || typeof this.pdoc.config === 'string') throw new ProblemConfigError();
         const rdocs = await record.getMulti(domainId, {
             pid,
             contest: { $nin: [record.RECORD_GENERATE, record.RECORD_PRETEST] },
             status: { $ne: STATUS.STATUS_CANCELED },
             'files.hack': { $exists: false },
         }).project({ _id: 1, contest: 1 }).toArray();
-        if (!this.pdoc.config || typeof this.pdoc.config === 'string') throw new ProblemConfigError();
-        const priority = await record.submissionPriority(this.user._id, -10000 - rdocs.length * 5 - 50);
-        await record.reset(domainId, rdocs.map((rdoc) => rdoc._id), true);
-        await Promise.all([
-            record.judge(domainId, rdocs.filter((i) => i.contest).map((i) => i._id), priority, { detail: false }, { rejudge: true }),
-            record.judge(domainId, rdocs.filter((i) => !i.contest).map((i) => i._id), priority, {}, { rejudge: true }),
-        ]);
+        if (rdocs.length) {
+            const priority = await record.submissionPriority(this.user._id, -10000 - rdocs.length * 5 - 50);
+            await record.reset(domainId, rdocs.map((rdoc) => rdoc._id), true);
+            await Promise.all([
+                record.judge(domainId, rdocs.filter((i) => i.contest).map((i) => i._id), priority, { detail: false }, { rejudge: true }),
+                record.judge(domainId, rdocs.filter((i) => !i.contest).map((i) => i._id), priority, {}, { rejudge: true }),
+            ]);
+        }
         this.back();
     }
 
