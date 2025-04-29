@@ -65,5 +65,7 @@ jobs:
           node -r @hydrooj/register build/tagger.ts
           yarn build:ui:iconfont
           parallel --tty -j+0 yarn ::: build build:ui:production:webpack
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       - name: Publish
         run: yarn workspaces foreach -A npm publish --access public --tag latest
