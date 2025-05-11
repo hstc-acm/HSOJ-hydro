@@ -43,7 +43,13 @@ jobs:
           rm -rf node_modules yarn.lock **/tsconfig.tsbuildinfo
       - name: Config And Install
         run: |
-          echo -e "\nnpmAuthIdent: \"${{ secrets.NPM_USERNAME }}:${{ secrets.NPM_PASSWORD }}\"\nnpmRegistryServer: \"${{ secrets.NPM_REGISTRY }}\"\nnpmPublishRegistry: \"${{ secrets.NPM_REGISTRY }}\"" >> .yarnrc.yml
+          cat << EOF >> .yarnrc.yml
+          npmRegistryServer: "https://registry.npmjs.org"
+          npmPublishRegistry: "https://${{ secrets.NPM_REGISTRY }}"
+          npmRegistries:
+            "//${{ secrets.NPM_REGISTRY }}":
+              npmAuthIdent: "${{ secrets.NPM_USERNAME }}:${{ secrets.NPM_PASSWORD }}"
+          EOF
           git config --global user.name TsukiyukiMiyako
           git config --global user.email admin@acm.tohsakura.com
           yarn
