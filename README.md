@@ -94,6 +94,11 @@ Hydro 的语言设置并非硬编码于系统中，而是使用了配置文件�
 <details>
 <summary><h2>更新日志（点击展开）</h2></summary>
 
+## Unreleased
+
+- judge: breaking: 不再支持在 checker 等的编译阶段读取选手代码
+
+
 ## Hydro 4.19.0 / UI 4.57.0
 
 - core&ui&judge: 添加通信题支持

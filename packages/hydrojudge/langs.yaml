@@ -11,14 +11,20 @@ java:
     execute: /usr/bin/java -Dfile.encoding="UTF-8" -cp Main.jar Main
     time_limit_rate: 2
     compile_time_limit: 30000
+    compile_memory_limit: 1024
 py3:
     compile: /usr/bin/python3 -c "import py_compile; py_compile.compile('/w/foo.py', '/w/foo', doraise=True)"
     code_file: foo.py
-    time_limit_rate: 2
     execute: /usr/bin/python3 foo
 rs:
     compile: /usr/bin/rustc -O -o /w/foo /w/foo.rs
+    compile_time_limit: 30000
+hs:
+    compile: /usr/bin/ghc -O -outputdir /tmp -o /w/foo /w/foo.hs
+    compile_time_limit: 30000
 js:
     execute: /usr/bin/jsc foo.js
 go:
     compile: /usr/bin/go build -o /w/foo /w/foo.go
+    compile_time_limit: 30000
+
