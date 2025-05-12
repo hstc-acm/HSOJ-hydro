@@ -121,7 +121,13 @@ langs:
       display: Kotlin/JVM
       compile_time_limit: 30000
       version: /usr/bin/kotlinc -version
-     py.py3:
+    py:
+      compile: /usr/bin/python -c "import py_compile; py_compile.compile('/w/foo.py', '/w/foo', doraise=True)"
+      code_file: foo.py
+      execute: /usr/bin/python foo
+      highlight: python
+      display: Python
+    py.py3:
       compile: /usr/bin/python3 -c "import py_compile; py_compile.compile('/w/foo.py', '/w/foo', doraise=True)"
       execute: /usr/bin/python3 foo
       display: Python 3
