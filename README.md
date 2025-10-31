@@ -15,6 +15,36 @@ HSOJ-hydro 是韩山师范学院acm集训队（笔架山算法小队）二次开
 
 [Hydro中文文档](https://hydro.js.org/) 
 
+## 文件变更情况
+```
+build/publish.ts
+build/tagger.ts
+framework/framework/server.ts
+packages/hydrooj/locales/ko.yaml
+packages/hydrooj/locales/zh.yaml
+packages/hydrooj/locales/zh_TW.yaml
+packages/ui-default/static/android-chrome-192x192.png
+packages/ui-default/static/apple-touch-icon-180x180.png
+packages/ui-default/static/favicon-16x16.png
+packages/ui-default/static/favicon-32x32.png
+packages/ui-default/static/favicon-96x96.png
+packages/ui-default/static/favicon.ico
+packages/ui-default/components/navigation/nav-logo-small_dark.png
+packages/ui-default/misc/immersive-background.jpg
+packages/ui-default/misc/immersive-background.webp
+packages/ui-default/misc/immersive-background@2x.jpg
+packages/ui-default/misc/immersive-background@2x.webp
+
+# 以下是核心变化
+packages/hydrojudge/langs.yaml
+packages/hydrooj/setting.yaml
+packages/hydrooj/src/handler/user.ts
+packages/hydrooj/src/model/setting.ts
+packages/ui-default/misc/immersive.styl
+packages/ui-default/templates/partials/footer.html
+packages/ui-default/templates/partials/homepage/hitokoto.html
+packages/ui-default/templates/user_register_with_code.html
+```
 ## 系统特点
 
 ### 模块化设计，插件系统，功能热插拔
