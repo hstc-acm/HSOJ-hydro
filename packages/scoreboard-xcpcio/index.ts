@@ -1,22 +1,11 @@
 import path from 'path';
 import {
-    ContestModel, Context, fs, Handler, ObjectId, PERM, Schema, STATUS, Types, UserModel,
+    ContestModel, Context, fs, getAlphabeticId, ObjectId, PERM, Schema, STATUS, Types, UserModel,
 } from 'hydrooj';
 
 const file = fs.readFileSync(path.join(__dirname, 'public/assets/board.html'), 'utf8');
-const indexJs = file.match(/index-([A-Za-z0-9_-]+)\.js"/)?.[1];
-const indexCss = file.match(/index-([A-Za-z0-9_-]+)\.css"/)?.[1];
-
-class XcpcioHandler extends Handler {
-    async get() {
-        this.response.body = {
-            js: indexJs,
-            css: indexCss,
-        };
-        this.response.template = 'xcpcio_board.html';
-    }
-}
-
+const indexJs = file.match(/index-([\w-]+)\.js"/)?.[1];
+const indexCss = file.match(/index-([\w-]+)\.css"/)?.[1];
 const status = {
     [STATUS.STATUS_WRONG_ANSWER]: 'WRONG_ANSWER',
     [STATUS.STATUS_ACCEPTED]: 'CORRECT',
@@ -35,7 +24,6 @@ const status = {
 };
 
 export async function apply(ctx: Context) {
-    ctx.Route('board_xcpcio', '/board', XcpcioHandler);
     ctx.inject(['scoreboard'], ({ scoreboard }) => {
         scoreboard.addView('xcpcio', 'XCPCIO', {
             tdoc: 'tdoc',
@@ -76,7 +64,7 @@ export async function apply(ctx: Context) {
                             frozen_time: tdoc.lockAt ? Math.floor((tdoc.endAt.getTime() - tdoc.lockAt.getTime()) / 1000) : 0,
                             penalty: 1200,
                             problem_quantity: tdoc.pids.length,
-                            problem_id: tdoc.pids.map((i, idx) => String.fromCharCode(65 + idx)),
+                            problem_id: tdoc.pids.map((i, idx) => getAlphabeticId(idx)),
                             group: {
                                 official: '正式队伍',
                                 unofficial: '打星队伍',
@@ -84,9 +72,9 @@ export async function apply(ctx: Context) {
                             },
                             organization: 'School',
                             status_time_display: {
-                                'correct': true,
-                                'incorrect': true,
-                                'pending': true,
+                                correct: true,
+                                incorrect: true,
+                                pending: true,
                             },
                             medal: {
                                 official: {
@@ -112,7 +100,7 @@ export async function apply(ctx: Context) {
                             },
                         },
                         submissions: tsdocs.flatMap((i) => (i.journal || []).map((j) => {
-                            const submit = new ObjectId(j.rid).getTimestamp().getTime();
+                            const submit = new ObjectId(j.rid as string).getTimestamp().getTime();
                             const curStatus = status[j.status] || 'SYSTEM_ERROR';
                             return {
                                 problem_id: tdoc.pids.indexOf(j.pid),

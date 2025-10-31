@@ -2,7 +2,7 @@ import $ from 'jquery';
 import yaml from 'js-yaml';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ConfirmDialog } from 'vj/components/dialog';
+import { confirm } from 'vj/components/dialog';
 import Notification from 'vj/components/notification';
 import { downloadProblemSet } from 'vj/components/zipDownloader';
 import { NamedPage } from 'vj/misc/Page';
@@ -194,15 +194,15 @@ const page = new NamedPage(['problem_detail', 'contest_detail_problem', 'homewor
     const ans = {};
     const pids = [];
     let cnt = 0;
-    const reg = /{{ (input|select|multiselect|textarea)\(\d+(-\d+)?\) }}/g;
+    const reg = /\{\{ (input|select|multiselect|textarea)\(\d+(-\d+)?\) \}\}/g;
     $('.problem-content .typo').children().each((i, e) => {
       if (e.tagName === 'PRE' && !e.children[0].className.includes('#input')) return;
       const questions = [];
       let q;
-      while (q = reg.exec(e.innerText)) questions.push(q); // eslint-disable-line no-cond-assign
+      while (q = reg.exec(e.textContent)) questions.push(q); // eslint-disable-line no-cond-assign
       for (const [info, type] of questions) {
         cnt++;
-        const id = info.replace(/{{ (input|select|multiselect|textarea)\((\d+(-\d+)?)\) }}/, '$2');
+        const id = info.replace(/\{\{ (input|select|multiselect|textarea)\((\d+(-\d+)?)\) \}\}/, '$2');
         pids.push(id);
         if (type === 'input') {
           $(e).html($(e).html().replace(info, tpl`
@@ -239,15 +239,6 @@ const page = new NamedPage(['problem_detail', 'contest_detail_problem', 'homewor
     if (UiContext.tdoc?._id && UiContext.tdoc.rule !== 'homework') cacheKey += `@${UiContext.tdoc._id}`;
 
     let setUpdate;
-    function ProblemNavigation() {
-      [, setUpdate] = React.useState(0);
-      return <div className="contest-problems" style={{ margin: '1em' }}>
-        {pids.map((i) => <a href={`#p${i}`} className={ans[i] ? 'pending ' : ''}>
-          <span className="id">{i}</span>
-        </a>)}
-      </div>;
-    }
-
     const db = await openDB;
     async function saveAns() {
       await db.put('solutions', {
@@ -256,9 +247,36 @@ const page = new NamedPage(['problem_detail', 'contest_detail_problem', 'homewor
       });
     }
     async function clearAns() {
+      if (!(await confirm(i18n('All changes will be lost. Are you sure to clear all answers?')))) return;
       await db.delete('solutions', `${cacheKey}#objective`);
       window.location.reload();
     }
+
+    function ProblemNavigation() {
+      [, setUpdate] = React.useState(0);
+      const update = React.useCallback(() => { setUpdate?.((v) => v + 1); }, []);
+      React.useEffect(() => {
+        $(document).on('click', update);
+        $(document).on('input', update);
+        return () => {
+          $(document).off('click', update);
+          $(document).off('input', update);
+        };
+      }, [update]);
+      return <>
+        <div className="contest-problems" style={{ margin: '1em' }}>
+          {pids.map((i) => <a href={`#p${i}`} key={i} className={ans[i] ? 'pending ' : ''}>
+            <span className="id">{i}</span>
+          </a>)}
+        </div>
+        <li className="menu__item">
+          <button className="menu__link" onClick={clearAns}>
+            <span className="icon icon-erase" /> {i18n('Clear answers')}
+          </button>
+        </li>
+      </>;
+    }
+
     async function loadAns() {
       const saved = await db.get('solutions', `${cacheKey}#objective`);
       if (typeof saved?.value !== 'string') return;
@@ -310,26 +328,16 @@ const page = new NamedPage(['problem_detail', 'contest_detail_problem', 'homewor
             Notification.error(err.message);
           });
       });
-      $('.section--problem-sidebar ol.menu').prepend(tpl(<li className="menu__item" id="clearAnswers">
-        <a className="menu__link" href="javascript:;">
-          <span className="icon icon-erase" /> {i18n('Clear answers')}
-        </a>
-      </li>));
-      $(document).on('click', '#clearAnswers', async () => {
-        const result = await new ConfirmDialog({
-          $body: tpl.typoMsg('All changes will be lost. Are you sure to clear all answers?'),
-        }).open();
-        if (result === 'yes') await clearAns();
-      });
     }
-    const ele = document.createElement('div');
-    $('.section--problem-sidebar ol.menu').prepend(ele);
-    createRoot(ele).render(<ProblemNavigation />);
+    if (!document.getElementById('problem-navigation')) {
+      const ele = document.createElement('div');
+      ele.id = 'problem-navigation';
+      $('.section--problem-sidebar ol.menu').prepend(ele);
+      createRoot(document.getElementById('problem-navigation')).render(<ProblemNavigation />);
+    }
     $('.non-scratchpad--hide').hide();
     $('.scratchpad--hide').hide();
     $('.outer-loader-container').hide();
-    $(document).on('click', () => { setUpdate?.((v) => v + 1); });
-    $(document).on('input', () => { setUpdate?.((v) => v + 1); });
   }
 
   $(document).on('click', '[name="problem-sidebar__open-scratchpad"]', (ev) => {

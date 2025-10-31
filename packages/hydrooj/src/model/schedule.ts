@@ -1,10 +1,11 @@
 import moment from 'moment-timezone';
 import { Filter, ObjectId } from 'mongodb';
+import { Time } from '@hydrooj/utils';
 import { Context } from '../context';
 import { Schedule } from '../interface';
 import { Logger } from '../logger';
 import db from '../service/db';
-import type { WorkerService } from '../service/worker';
+import { } from '../service/worker';
 import RecordModel from './record';
 
 const logger = new Logger('model/schedule');
@@ -15,13 +16,13 @@ async function getFirst(query: Filter<Schedule>) {
     const q = { ...query };
     q.executeAfter ||= { $lt: new Date() };
     const res = await coll.findOneAndDelete(q);
-    if (res.value) {
-        logger.debug('%o', res.value);
-        if (res.value.interval) {
-            const executeAfter = moment(res.value.executeAfter).add(...res.value.interval).toDate();
-            await coll.insertOne({ ...res.value, executeAfter });
+    if (res) {
+        logger.debug('%o', res);
+        if (res.interval) {
+            const executeAfter = moment(res.executeAfter).add(...res.interval).toDate();
+            await coll.insertOne({ ...res, executeAfter });
         }
-        return res.value;
+        return res;
     }
     return null;
 }
@@ -55,16 +56,19 @@ class ScheduleModel {
     }
 
     static getFirst = getFirst;
-    /** @deprecated use ctx.inject(['worker'], cb) instead */
-    static Worker: WorkerService;
 }
 
 export async function apply(ctx: Context) {
-    ctx.inject(['worker'], (c) => {
-        ScheduleModel.Worker = c.worker;
-        c.worker.addHandler('task.daily', async () => {
+    ctx.on('domain/delete', (domainId) => coll.deleteMany({ domainId }));
+
+    await ctx.inject(['worker'], (c) => {
+        c.worker.addHandler('task.daily', async (task) => {
             const pref: Record<string, number> = {};
             let start = Date.now();
+            if (start - task.executeAfter.getTime() > Time.week) {
+                logger.warn('task.daily for date %s skipped', task.executeAfter.toISOString());
+                return;
+            }
             await RecordModel.coll.deleteMany({ contest: { $in: [RecordModel.RECORD_PRETEST, RecordModel.RECORD_GENERATE] } });
             pref.record = Date.now() - start;
             start = Date.now();
@@ -85,8 +89,6 @@ export async function apply(ctx: Context) {
             ctx.emit('task/daily/finish', pref);
         });
     });
-
-    ctx.on('domain/delete', (domainId) => coll.deleteMany({ domainId }));
 
     if (process.env.NODE_APP_INSTANCE !== '0') return;
     if (!await ScheduleModel.count({ type: 'schedule', subType: 'task.daily' })) {

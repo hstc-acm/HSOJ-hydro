@@ -25,8 +25,6 @@ import { ContestDetailBaseHandler } from './contest';
 import { postJudge } from './judge';
 
 class RecordListHandler extends ContestDetailBaseHandler {
-    tdoc?: Tdoc;
-
     @param('page', Types.PositiveInt, true)
     @param('pid', Types.ProblemId, true)
     @param('tid', Types.ObjectId, true)
@@ -72,7 +70,7 @@ class RecordListHandler extends ContestDetailBaseHandler {
         }
         if (pid) {
             if (typeof pid === 'string' && tdoc && /^[A-Z]$/.test(pid)) {
-                pid = tdoc.pids[parseInt(pid, 36) - 10];
+                pid = tdoc.pids[Number.parseInt(pid, 36) - 10];
             }
             const pdoc = await problem.get(domainId, pid);
             if (pdoc) q.pid = pdoc.docId;
@@ -131,7 +129,6 @@ class RecordListHandler extends ContestDetailBaseHandler {
 
 class RecordDetailHandler extends ContestDetailBaseHandler {
     rdoc: RecordDoc;
-    tdoc?: Tdoc;
 
     @param('rid', Types.ObjectId)
     async prepare(domainId: string, rid: ObjectId) {
@@ -156,9 +153,15 @@ class RecordDetailHandler extends ContestDetailBaseHandler {
 
     @param('rid', Types.ObjectId)
     @param('download', Types.Boolean)
+    @param('rev', Types.ObjectId, true)
     // eslint-disable-next-line consistent-return
-    async get(domainId: string, rid: ObjectId, download = false) {
-        const rdoc = this.rdoc;
+    async get(domainId: string, rid: ObjectId, download = false, rev?: ObjectId) {
+        let rdoc = this.rdoc;
+        const allRev = await record.collHistory.find({ rid }).project({ _id: 1, judgeAt: 1 }).sort({ _id: -1 }).toArray();
+        const allRevs: Record<string, Date> = Object.fromEntries(allRev.map((i) => [i._id.toString(), i.judgeAt]));
+        if (rev && allRevs[rev.toString()]) {
+            rdoc = { ...rdoc, ...omit(await record.collHistory.findOne({ _id: rev }), ['_id']), progress: null };
+        }
         let canViewDetail = true;
         if (rdoc.contest?.toString().startsWith('0'.repeat(23))) {
             if (rdoc.uid !== this.user._id) throw new PermissionError(PERM.PERM_READ_RECORD_CODE);
@@ -201,7 +204,7 @@ class RecordDetailHandler extends ContestDetailBaseHandler {
         } else if (download) return await this.download();
         this.response.template = 'record_detail.html';
         this.response.body = {
-            udoc, rdoc: canViewDetail ? rdoc : pick(rdoc, ['_id', 'lang', 'code']), pdoc, tdoc: this.tdoc,
+            udoc, rdoc: canViewDetail ? rdoc : pick(rdoc, ['_id', 'lang', 'code']), pdoc, tdoc: this.tdoc, rev, allRevs,
         };
     }
 
@@ -338,7 +341,6 @@ class RecordMainConnectionHandler extends ConnectionHandler {
         if (typeof this.pid === 'number' && rdoc.pid !== this.pid) return;
         if (typeof this.uid === 'number' && rdoc.uid !== this.uid) return;
 
-        // eslint-disable-next-line prefer-const
         let [udoc, pdoc] = await Promise.all([
             user.getById(this.args.domainId, rdoc.uid),
             problem.get(rdoc.domainId, rdoc.pid),
@@ -381,6 +383,7 @@ class RecordDetailConnectionHandler extends ConnectionHandler {
     throttleSend: any;
     applyProjection = false;
     noTemplate = false;
+    canViewCode = false;
 
     @param('rid', Types.ObjectId)
     @param('noTemplate', Types.Boolean, true)
@@ -402,16 +405,12 @@ class RecordDetailConnectionHandler extends ConnectionHandler {
             problem.getStatus(domainId, rdoc.pid, this.user._id),
         ]);
 
-        let canViewCode = rdoc.uid === this.user._id;
-        canViewCode ||= this.user.hasPriv(PRIV.PRIV_READ_RECORD_CODE);
-        canViewCode ||= this.user.hasPerm(PERM.PERM_READ_RECORD_CODE);
-        canViewCode ||= this.user.hasPerm(PERM.PERM_READ_RECORD_CODE_ACCEPT) && self?.status === STATUS.STATUS_ACCEPTED;
-        if (!canViewCode) {
-            rdoc.code = '';
-            rdoc.compilerTexts = [];
-        }
+        this.canViewCode = rdoc.uid === this.user._id;
+        this.canViewCode ||= this.user.hasPriv(PRIV.PRIV_READ_RECORD_CODE);
+        this.canViewCode ||= this.user.hasPerm(PERM.PERM_READ_RECORD_CODE);
+        this.canViewCode ||= this.user.hasPerm(PERM.PERM_READ_RECORD_CODE_ACCEPT) && self?.status === STATUS.STATUS_ACCEPTED;
 
-        if (!(rdoc.contest && this.user._id === rdoc.uid)) {
+        if (!rdoc.contest || this.user._id !== rdoc.uid) {
             if (!problem.canViewBy(pdoc, this.user)) throw new PermissionError(PERM.PERM_VIEW_PROBLEM_HIDDEN);
         }
 
@@ -442,9 +441,16 @@ class RecordDetailConnectionHandler extends ConnectionHandler {
             clearTimeout(this.disconnectTimeout);
             this.disconnectTimeout = null;
         }
-        if (this.applyProjection && rdoc.input === undefined) rdoc = contest.applyProjection(this.tdoc, rdoc, this.user);
+        if (this.applyProjection) rdoc = contest.applyProjection(this.tdoc, rdoc, this.user);
         // TODO: frontend doesn't support incremental update
         // if ($set) this.send({ $set, $push });
+        if (!this.canViewCode) {
+            rdoc = {
+                ...rdoc,
+                code: '',
+                compilerTexts: [],
+            };
+        }
         if (![STATUS.STATUS_WAITING, STATUS.STATUS_JUDGING, STATUS.STATUS_COMPILING, STATUS.STATUS_FETCHED].includes(rdoc.status)) {
             this.disconnectTimeout = setTimeout(() => this.close(4001, 'Ended'), 30000);
         }

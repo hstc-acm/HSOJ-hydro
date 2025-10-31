@@ -4,7 +4,7 @@ import { writeFileSync } from 'fs';
 import path from 'path';
 import ora from 'ora';
 import packageJson from 'package-json';
-import { gt } from 'semver';
+import { gt, prerelease } from 'semver';
 import { getWorkspaces, spawnAsync } from './utils';
 
 const tag = 'latest';
@@ -29,6 +29,7 @@ const tag = 'latest';
             console.error(e);
         }
         spinner.text = `Loading workspaces (${++progress}/${folders.length})`;
+        return progress;
     }));
     spinner.succeed();
 
@@ -36,7 +37,7 @@ const tag = 'latest';
         for (const name in bumpMap) {
             console.log(`publishing ${name}@${bumpMap[name]} ...`);
             await spawnAsync(
-                `yarn npm publish --access public --tag ${tag}`,
+                `yarn npm publish --access public --tag ${tag}${(CI && !SKIP_PROVENANCE) ? ' --provenance' : ''}`,
                 path.resolve(name),
             );
         }

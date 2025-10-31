@@ -8,10 +8,10 @@ import {
 const RE_MD5 = /^[\da-f]{32}$/;
 
 function checkLock(innerCall) {
-    return async (args) => {
+    return async (...args) => {
         const cur = await SystemModel.get('migrate.lock');
         if (cur) throw new SystemError(`migrate lock already exists: ${cur}, possible another migration is running`);
-        return innerCall(args);
+        return innerCall(...args);
     };
 }
 
@@ -28,6 +28,7 @@ export function apply(ctx: Context) {
             contestType: Schema.string().default('oi'),
             dataDir: Schema.string().required(),
             uploadDir: Schema.string().default('/home/judge/src/web/upload/'),
+            withContest: Schema.boolean().default(true),
         }),
         checkLock((...args) => require('./scripts/hustoj').run(...args)),
     );

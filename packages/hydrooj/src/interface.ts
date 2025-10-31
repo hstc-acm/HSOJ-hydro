@@ -1,69 +1,61 @@
+/* eslint-disable perfectionist/sort-exports */
 import type { AttestationFormat, CredentialDeviceType } from '@simplewebauthn/server';
-import type { AuthenticationExtensionsAuthenticatorOutputs } from '@simplewebauthn/server/esm/helpers/decodeAuthenticatorExtensions';
+import type { ParsedAuthenticatorData } from '@simplewebauthn/server/helpers';
 import type fs from 'fs';
 import type { Dictionary, NumericDictionary } from 'lodash';
 import type { Binary, FindCursor, ObjectId } from 'mongodb';
 import type {
-    FileInfo, RecordPayload,
+    FileInfo, RecordJudgeInfo, RecordPayload,
 } from '@hydrooj/common/types';
 import type { Context } from './context';
+import type { PrintTaskStatus } from './model/contest';
 import type { DocStatusType } from './model/document';
+import type { OauthMap } from './model/oauth';
 import type { ProblemDoc } from './model/problem';
-import type { Handler } from './service/server';
 
 export * from '@hydrooj/common/types';
 
 type document = typeof import('./model/document');
 
 export interface System {
-    _id: string,
-    value: any,
+    _id: string;
+    value: any;
 }
 
 export interface SystemKeys {
-    'smtp.user': string,
-    'smtp.from': string,
-    'smtp.pass': string,
-    'smtp.host': string,
-    'smtp.port': number,
-    'smtp.secure': boolean,
-    'installid': string,
-    'server.name': string,
-    'server.url': string,
-    'server.xff': string,
-    'server.xhost': string,
-    'server.host': string,
-    'server.port': number,
-    'server.language': string,
-    'limit.problem_files_max': number,
-    'problem.categories': string,
-    'session.keys': string[],
-    'session.saved_expire_seconds': number,
-    'session.unsaved_expire_seconds': number,
-    'user.quota': number,
+    'smtp.user': string;
+    'smtp.from': string;
+    'smtp.pass': string;
+    'smtp.host': string;
+    'smtp.port': number;
+    'smtp.secure': boolean;
+    installid: string;
+    'server.name': string;
+    'server.url': string;
+    'server.xff': string;
+    'server.xhost': string;
+    'server.host': string;
+    'server.port': number;
+    'server.language': string;
+    'limit.problem_files_max': number;
+    'problem.categories': string;
+    'session.keys': string[];
+    'session.saved_expire_seconds': number;
+    'session.unsaved_expire_seconds': number;
+    'user.quota': number;
 }
 
 export interface Setting {
-    family: string,
-    key: string,
-    range: [string, string][] | Record<string, string>,
-    value: any,
-    type: string,
-    subType?: string,
-    name: string,
-    desc: string,
-    flag: number,
-}
-
-export interface OAuthUserResponse {
-    _id: string;
-    email: string;
-    avatar?: string;
-    bio?: string;
-    uname?: string[];
-    viewLang?: string;
-    set?: Record<string, any>;
-    setInDomain?: Record<string, any>;
+    family: string;
+    key: string;
+    range: [string, string][] | Record<string, string>;
+    value: any;
+    type: string;
+    subType?: string;
+    name: string;
+    desc: string;
+    flag: number;
+    validation?: (val: any) => boolean;
 }
 
 export interface Authenticator {
@@ -80,7 +72,7 @@ export interface Authenticator {
     userVerified: boolean;
     credentialDeviceType: CredentialDeviceType;
     credentialBackedUp: boolean;
-    authenticatorExtensionResults?: AuthenticationExtensionsAuthenticatorOutputs;
+    authenticatorExtensionResults?: ParsedAuthenticatorData['extensionsData'];
     authenticatorAttachment: 'platform' | 'cross-platform';
 }
 
@@ -130,7 +122,7 @@ export interface UserPreferenceDoc {
     content: string;
 }
 
-export type ownerInfo = { owner: number, maintainer?: number[] };
+export interface OwnerInfo { owner: number, maintainer?: number[] }
 
 export type User = import('./model/user').User;
 export type Udict = Record<number, User>;
@@ -172,7 +164,6 @@ export interface Document {
 }
 
 declare module './model/problem' {
-    // eslint-disable-next-line @typescript-eslint/no-shadow
     interface ProblemDoc {
         docType: document['TYPE_PROBLEM'];
         docId: number;
@@ -202,11 +193,11 @@ export type { ProblemDoc } from './model/problem';
 export type ProblemDict = NumericDictionary<ProblemDoc>;
 
 export interface StatusDocBase {
-    _id: ObjectId,
-    docId: any,
-    docType: number,
-    domainId: string,
-    uid: number,
+    _id: ObjectId;
+    docId: any;
+    docType: number;
+    domainId: string;
+    uid: number;
 }
 
 export interface ProblemStatusDoc extends StatusDocBase {
@@ -223,6 +214,11 @@ export type RecordDoc = {
 } & {
     _id: ObjectId;
 };
+
+export interface RecordHistoryDoc extends RecordJudgeInfo {
+    _id: ObjectId;
+    rid: ObjectId;
+}
 
 export interface RecordStatDoc {
     _id: ObjectId;
@@ -248,10 +244,10 @@ export type ScoreboardRow = ScoreboardNode[] & { raw?: any };
 export type PenaltyRules = Dictionary<number>;
 
 export interface TrainingNode {
-    _id: number,
-    title: string,
-    requireNids: number[],
-    pids: number[],
+    _id: number;
+    title: string;
+    requireNids: number[];
+    pids: number[];
 }
 
 export interface Tdoc extends Document {
@@ -268,7 +264,9 @@ export interface Tdoc extends Document {
     _code?: string;
     assign?: string[];
     files?: FileInfo[];
+    privateFiles?: FileInfo[];
     allowViewCode?: boolean;
+    allowPrint?: boolean;
 
     // For contest
     lockAt?: Date;
@@ -276,6 +274,7 @@ export interface Tdoc extends Document {
     autoHide?: boolean;
     balloon?: Record<number, string | { color: string, name: string }>;
     score?: Record<number, number>;
+    langs?: string[];
 
     /**
      * In hours
@@ -293,29 +292,28 @@ export interface Tdoc extends Document {
 }
 
 export interface TrainingDoc extends Omit<Tdoc, 'docType'> {
-    docType: document['TYPE_TRAINING'],
+    docType: document['TYPE_TRAINING'];
     description: string;
     pin?: number;
     dag: TrainingNode[];
 }
 
 export interface DomainDoc extends Record<string, any> {
-    _id: string,
-    owner: number,
-    roles: Dictionary<string>,
-    avatar: string,
-    bulletin: string,
-    _join?: any,
-    host?: string[],
+    _id: string;
+    owner: number;
+    roles: Dictionary<string>;
+    avatar: string;
+    bulletin: string;
+    _join?: any;
+    host?: string[];
 }
 
 // Message
 export interface MessageDoc {
-    _id: ObjectId,
-    from: number,
-    to: number,
-    content: string,
-    flag: number,
+    from: number;
+    to: number;
+    content: string;
+    flag: number;
 }
 
 // Blacklist
@@ -388,23 +386,33 @@ export interface ContestClarificationDoc extends Document {
     reply: DiscussionTailReplyDoc[];
 }
 
+export interface ContestPrintDoc extends Document {
+    docType: document['TYPE_CONTEST_PRINT'];
+    docId: ObjectId;
+    parentType: document['TYPE_CONTEST'];
+    parentId: ObjectId;
+    title: string;
+    content: string;
+    status: PrintTaskStatus;
+}
+
 export interface TokenDoc {
-    _id: string,
-    tokenType: number,
-    createAt: Date,
-    updateAt: Date,
-    expireAt: Date,
-    [key: string]: any,
+    _id: string;
+    tokenType: number;
+    createAt: Date;
+    updateAt: Date;
+    expireAt: Date;
+    [key: string]: any;
 }
 
 export interface OplogDoc extends Record<string, any> {
-    _id: ObjectId,
-    type: string,
+    _id: ObjectId;
+    type: string;
 }
 
 export interface ContestStat extends Record<string, any> {
-    detail: Record<number, Record<string, any>>,
-    unrank?: boolean,
+    detail: Record<number, Record<string, any>>;
+    unrank?: boolean;
 }
 
 export interface ScoreboardConfig {
@@ -445,9 +453,9 @@ export type ContestRules = Dictionary<ContestRule>;
 export type ProblemImporter = (url: string, handler: any) => Promise<[ProblemDoc, fs.ReadStream?]> | [ProblemDoc, fs.ReadStream?];
 
 export interface Script {
-    run: (args: any, report: Function) => any,
-    description: string,
-    validate: any,
+    run: (args: any, report: Function) => any;
+    description: string;
+    validate: any;
 }
 
 export interface Task {
@@ -501,12 +509,7 @@ export interface OpCountDoc {
     opcount: number;
 }
 
-export interface OauthMap {
-    /** source openId */
-    _id: string;
-    /** target uid */
-    uid: number;
-}
+export type { OauthMap, OAuthProvider, OAuthUserResponse } from './model/oauth';
 
 export interface DiscussionHistoryDoc {
     title?: string;
@@ -540,73 +543,66 @@ export interface LockDoc {
 
 declare module './service/db' {
     interface Collections {
-        'blacklist': BlacklistDoc;
-        'domain': DomainDoc;
+        blacklist: BlacklistDoc;
+        domain: DomainDoc;
         'domain.user': any;
-        'record': RecordDoc;
+        record: RecordDoc;
         'record.stat': RecordStatDoc;
-        'document': any;
+        'record.history': RecordHistoryDoc;
+        document: any;
         'document.status': StatusDocBase & {
             [K in keyof DocStatusType]: { docType: K } & DocStatusType[K];
         }[keyof DocStatusType];
         'discussion.history': DiscussionHistoryDoc;
-        'user': Udoc;
+        user: Udoc;
         'user.preference': UserPreferenceDoc;
-        'vuser': VUdoc;
+        vuser: VUdoc;
         'user.group': GDoc;
-        'check': System;
-        'message': MessageDoc;
-        'token': TokenDoc;
-        'status': any;
-        'oauth': OauthMap;
-        'system': System;
-        'task': Task;
-        'storage': FileNode;
-        'oplog': OplogDoc;
-        'event': EventDoc;
-        'opcount': OpCountDoc;
-        'schedule': Schedule;
+        check: System;
+        message: MessageDoc;
+        token: TokenDoc;
+        status: any;
+        oauth: OauthMap;
+        system: System;
+        task: Task;
+        storage: FileNode;
+        oplog: OplogDoc;
+        event: EventDoc;
+        opcount: OpCountDoc;
+        schedule: Schedule;
         'contest.balloon': ContestBalloonDoc;
-        'lock': LockDoc;
+        lock: LockDoc;
     }
 }
 
 export interface Model {
-    blacklist: typeof import('./model/blacklist').default,
-    builtin: typeof import('./model/builtin'),
-    contest: typeof import('./model/contest'),
-    discussion: typeof import('./model/discussion'),
-    document: Omit<typeof import('./model/document'), 'apply'>,
-    domain: typeof import('./model/domain').default,
-    message: typeof import('./model/message').default,
-    opcount: typeof import('./model/opcount'),
-    problem: typeof import('./model/problem').default,
-    record: typeof import('./model/record').default,
-    setting: typeof import('./model/setting'),
-    solution: typeof import('./model/solution').default,
-    system: typeof import('./model/system'),
-    task: typeof import('./model/task').default,
+    blacklist: typeof import('./model/blacklist').default;
+    builtin: typeof import('./model/builtin');
+    contest: typeof import('./model/contest');
+    discussion: typeof import('./model/discussion');
+    document: Omit<typeof import('./model/document'), 'apply'>;
+    domain: typeof import('./model/domain').default;
+    message: typeof import('./model/message').default;
+    opcount: typeof import('./model/opcount');
+    problem: typeof import('./model/problem').default;
+    record: typeof import('./model/record').default;
+    setting: typeof import('./model/setting');
+    solution: typeof import('./model/solution').default;
+    system: typeof import('./model/system');
+    task: typeof import('./model/task').default;
     schedule: typeof import('./model/schedule').default;
-    oplog: typeof import('./model/oplog'),
-    token: typeof import('./model/token').default,
-    training: typeof import('./model/training'),
-    user: typeof import('./model/user').default,
-    oauth: typeof import('./model/oauth').default,
-    storage: typeof import('./model/storage').default,
-    rp: typeof import('./script/rating').RpTypes,
-}
-
-export interface HydroService {
-    /** @deprecated */
-    bus: Context,
-    db: typeof import('./service/db').default,
-    server: typeof import('./service/server'),
-    storage: typeof import('./service/storage').default,
+    oplog: typeof import('./model/oplog');
+    token: typeof import('./model/token').default;
+    training: typeof import('./model/training');
+    user: typeof import('./model/user').default;
+    oauth: typeof import('./model/oauth').default;
+    storage: typeof import('./model/storage').default;
+    rp: typeof import('./script/rating').RpTypes;
 }
 
 export interface GeoIP {
-    provider: string,
-    lookup: (ip: string, locale?: string) => any,
+    provider: string;
+    lookup: (ip: string, locale?: string) => any;
 }
 
 export interface ProblemSearchResponse {
@@ -621,40 +617,22 @@ export interface ProblemSearchOptions {
 
 export type ProblemSearch = (domainId: string, q: string, options?: ProblemSearchOptions) => Promise<ProblemSearchResponse>;
 
-export interface Lib extends Record<string, any> {
-    difficulty: typeof import('./lib/difficulty').default;
-    buildContent: typeof import('./lib/content').buildContent;
-    mail: typeof import('./lib/mail');
-    rating: typeof import('./lib/rating').default;
-    testdataConfig: typeof import('./lib/testdataConfig');
-    problemSearch: ProblemSearch;
-}
-
 export type UIInjectableFields = 'ProblemAdd' | 'Notification' | 'Nav' | 'UserDropdown' | 'DomainManage' | 'ControlPanel';
 export interface UI {
-    template: Record<string, string>,
-    nodes: Record<UIInjectableFields, any[]>,
-    getNodes: typeof import('./lib/ui').getNodes,
-    inject: typeof import('./lib/ui').inject,
+    nodes: Record<UIInjectableFields, any[]>;
+    getNodes: typeof import('./lib/ui').getNodes;
+    inject: typeof import('./lib/ui').inject;
 }
 
 export interface ModuleInterfaces {
-    oauth: {
-        text: string;
-        icon?: string;
-        get: (this: Handler) => Promise<void>;
-        callback: (this: Handler, args: Record<string, any>) => Promise<OAuthUserResponse>;
-        lockUsername?: boolean;
-    };
     hash: (password: string, salt: string, user: User) => boolean | string | Promise<string>;
+    problemSearch: ProblemSearch;
 }
 
 export interface HydroGlobal {
     version: Record<string, string>;
     model: Model;
     script: Record<string, Script>;
-    service: HydroService;
-    lib: Lib;
     module: { [K in keyof ModuleInterfaces]: Record<string, ModuleInterfaces[K]> };
     ui: UI;
     error: typeof import('./error');
@@ -666,13 +644,13 @@ export interface HydroGlobal {
 declare global {
     namespace NodeJS {
         interface Global {
-            Hydro: HydroGlobal,
-            addons: string[],
+            Hydro: HydroGlobal;
+            addons: string[];
         }
     }
     /** @deprecated */
     var bus: Context; // eslint-disable-line
     var app: Context; // eslint-disable-line
     var Hydro: HydroGlobal; // eslint-disable-line
-    var addons: string[]; // eslint-disable-line
+    var addons: Record<string, string>; // eslint-disable-line
 }

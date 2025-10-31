@@ -35,7 +35,7 @@ export default function ProblemType() {
           renderActiveTabPanelOnly
         >
           <span className={Classes.TAB}>{i18n('Problem Type')}</span>
-          <Tabs.Expander />
+          <TabsExpander />
           <Tab
             id="default"
             title={i18n('problem_type.default')}
@@ -111,7 +111,7 @@ export default function ProblemType() {
                   panel={(
                     <div className="row">
                       <FormItem columns={4} label="Interface">
-                        <ManagedSelect options={['syzoj', 'hustoj', 'qduoj', 'lemon']} formKey="checker_type" />
+                        <ManagedSelect options={['syzoj', 'hustoj', 'qduoj', 'lemon', 'kattis']} formKey="checker_type" />
                       </FormItem>
                       <SingleFileSelect formKey="checker" label="Checker" withLang />
                     </div>

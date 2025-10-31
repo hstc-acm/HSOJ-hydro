@@ -3,14 +3,14 @@ import $ from 'jquery';
 import yaml from 'js-yaml';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ConfirmDialog } from 'vj/components/dialog/index';
+import { confirm, prompt } from 'vj/components/dialog/index';
 import Notification from 'vj/components/notification';
 import { configYamlFormat } from 'vj/components/problemconfig/ProblemConfigEditor';
 import uploadFiles from 'vj/components/upload';
 import download from 'vj/components/zipDownloader';
 import { NamedPage } from 'vj/misc/Page';
 import {
-  i18n, loadReactRedux, pjax, request, tpl,
+  i18n, loadReactRedux, pjax, request,
 } from 'vj/utils';
 
 const page = new NamedPage('problem_config', () => {
@@ -41,8 +41,9 @@ const page = new NamedPage('problem_config', () => {
 
   async function handleClickRename(ev: JQuery.ClickEvent<Document, undefined, any, any>) {
     const file = [$(ev.currentTarget).parent().parent().attr('data-filename')];
-    // eslint-disable-next-line no-alert
-    const newName = prompt(i18n('Enter a new name for the file: '));
+    const newName = (await prompt(i18n('Enter a new name for the file: '), {
+      name: { required: true, type: 'text', autofocus: true },
+    }))?.name as string;
     if (!newName) return;
     try {
       await request.post('./files', {
@@ -51,7 +52,7 @@ const page = new NamedPage('problem_config', () => {
         newNames: [newName],
         type: 'testdata',
       });
-      Notification.success(i18n('File have been renamed.'));
+      Notification.success(i18n('File has been renamed.'));
       await pjax.request({ url: './files?d=testdata&sidebar=true', push: false });
     } catch (error) {
       Notification.error(error.message);
@@ -60,17 +61,14 @@ const page = new NamedPage('problem_config', () => {
 
   async function handleClickRemove(ev: JQuery.ClickEvent<Document, undefined, any, any>) {
     const file = [$(ev.currentTarget).parent().parent().attr('data-filename')];
-    const action = await new ConfirmDialog({
-      $body: tpl.typoMsg(i18n('Confirm to delete the file?')),
-    }).open();
-    if (action !== 'yes') return;
+    if (!(await confirm(i18n('Confirm to delete the file?')))) return;
     try {
       await request.post('./files', {
         operation: 'delete_files',
         files: file,
         type: 'testdata',
       });
-      Notification.success(i18n('File have been deleted.'));
+      Notification.success(i18n('File has been deleted.'));
       reduxStore.dispatch({
         type: 'CONFIG_DELETE_TESTDATA',
         value: file,

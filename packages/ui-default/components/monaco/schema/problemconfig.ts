@@ -70,7 +70,7 @@ const problemConfigSchema: JSONSchema7 = {
     subType: { type: 'string' },
     langs: { type: 'array', items: { type: 'string' } },
     target: { type: 'string' },
-    checker_type: { enum: ['default', 'lemon', 'syzoj', 'hustoj', 'testlib', 'strict', 'qduoj'] },
+    checker_type: { enum: ['default', 'lemon', 'syzoj', 'hustoj', 'testlib', 'strict', 'qduoj', 'kattis'] },
     checker: {
       oneOf: [
         { type: 'string', enum: testlibCheckers },
@@ -86,7 +86,7 @@ const problemConfigSchema: JSONSchema7 = {
     cases: { $ref: '#/definitions/cases' },
     subtasks: { type: 'array', items: { $ref: '#/definitions/subtask' } },
     filename: { type: 'string' },
-    detail: { type: 'boolean' },
+    detail: { type: 'string', enum: ['full', 'case', 'none'] },
     time: { $ref: '#/definitions/time' },
     memory: { $ref: '#/definitions/memory' },
     score: { $ref: '#/definitions/score' },

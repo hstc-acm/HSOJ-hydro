@@ -1,4 +1,3 @@
-/* eslint-disable no-await-in-loop */
 import path from 'path';
 import PQueue from 'p-queue';
 import superagent from 'superagent';
@@ -66,6 +65,10 @@ export default class Hydro implements Session {
         });
         if (!res.body.links) throw new FormatError('problem not exist');
         const queue = new PQueue({ concurrency: 10 });
+        let error = null;
+        queue.on('error', (e) => {
+            error = e;
+        });
         for (const name in res.body.links) {
             queue.add(async () => {
                 if (name.includes('/')) await fs.ensureDir(path.dirname(files[name]));
@@ -73,7 +76,8 @@ export default class Hydro implements Session {
                 await pipeRequest(this.get(res.body.links[name]), w, 60000, name);
             });
         }
-        await queue.onEmpty();
+        await queue.onIdle();
+        if (error) throw error;
         return null;
     }
 
@@ -107,8 +111,8 @@ export default class Hydro implements Session {
         this.ws.send(JSON.stringify({ ...data, rid, key }));
     }
 
-    getNext(t: JudgeTask) {
-        return (data: Partial<JudgeResultBody>) => {
+    getReporter(t: JudgeTask) {
+        const next = (data: Partial<JudgeResultBody>) => {
             log.debug('Next: %o', data);
             const performanceMode = getConfig('performance') || t.meta.rejudge || t.meta.hackRejudge;
             if (performanceMode && data.case && !data.compilerText && !data.message) {
@@ -120,14 +124,12 @@ export default class Hydro implements Session {
                 this.send(t.request.rid, 'next', data);
             }
         };
-    }
-
-    getEnd(t: JudgeTask) {
-        return (data: Partial<JudgeResultBody>) => {
+        const end = (data: Partial<JudgeResultBody>) => {
             log.info('End: %o', data);
             if (t.callbackCache) data.cases = t.callbackCache;
             this.send(t.request.rid, 'end', data);
         };
+        return { next, end };
     }
 
     async consume(queue: PQueue) {

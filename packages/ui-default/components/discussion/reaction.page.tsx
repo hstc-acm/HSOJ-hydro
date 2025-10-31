@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import 'jquery.easing';
 
 import { Popover } from '@blueprintjs/core';
@@ -8,7 +9,7 @@ import ReactDOM from 'react-dom/client';
 import { AutoloadPage } from 'vj/misc/Page';
 import { request } from 'vj/utils';
 
-function renderReactions(reactions, self, rootEle) {
+function renderReactions(reactions = {}, self = {}, rootEle) {
   let html = '';
   for (const [k, v] of Object.entries(reactions).sort(([, v1], [, v2]) => +v2 - +v1)) {
     if (!v) continue;
@@ -61,8 +62,8 @@ function Reaction({ payload, ele }) {
             <input name="emojiSuggest" onFocus={() => updateFocus(true)} onBlur={() => updateFocus(false)}></input>
           </div>
         </div>
-      </div>
-      }>
+      </div>}
+    >
       <span className="icon icon-emoji"></span>
     </Popover>
   );

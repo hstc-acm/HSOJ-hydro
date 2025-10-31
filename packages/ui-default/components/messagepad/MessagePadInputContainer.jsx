@@ -42,6 +42,7 @@ const mapDispatchToProps = (dispatch) => ({
   },
 });
 
+// eslint-disable-next-line react-refresh/only-export-components
 export default connect(mapStateToProps, mapDispatchToProps)(class MessagePadInputContainer extends React.PureComponent {
   static contextTypes = {
     store: PropTypes.object,
@@ -50,7 +51,7 @@ export default connect(mapStateToProps, mapDispatchToProps)(class MessagePadInpu
   componentDidUpdate(prevProps) {
     this.focusInput = (
       this.props.activeId !== prevProps.activeId
-      || prevProps.isPosting !== this.props.isPosting && this.props.isPosting === false
+      || (prevProps.isPosting !== this.props.isPosting && this.props.isPosting === false)
     );
     if (this.focusInput) {
       const { scrollX, scrollY } = window;

@@ -1,5 +1,6 @@
-import { diffLines } from 'diff';
+/* eslint-disable react-refresh/only-export-components */
 import type { ProblemConfigFile, TestCaseConfig } from 'hydrooj/src/interface';
+import { diffLines } from 'diff';
 import $ from 'jquery';
 import yaml from 'js-yaml';
 import { isEqual } from 'lodash';
@@ -23,7 +24,7 @@ const mapDispatchToProps = (dispatch) => ({
 
 interface Props {
   config: any;
-  handleUpdateCode: Function;
+  handleUpdateCode: (val: string) => void;
 }
 
 const configKey = [

@@ -1,17 +1,16 @@
-import esbuild from 'esbuild';
-import {
-  Context, fs, Handler, Logger, NotFoundError, param, SettingModel, sha1,
-  size, SystemModel, Types, UiContextBase,
-} from 'hydrooj';
-import { debounce } from 'lodash';
 import { tmpdir } from 'os';
 import {
   basename, join, relative, resolve,
 } from 'path';
+import {
+  Context, fs, Handler, Logger, NotFoundError, param, SettingModel, sha1,
+  size, SystemModel, Types, UiContextBase,
+} from 'hydrooj';
+import esbuild from 'esbuild';
 
 declare module 'hydrooj' {
   interface UI {
-    esbuildPlugins?: esbuild.Plugin[]
+    esbuildPlugins?: esbuild.Plugin[];
   }
   interface SystemKeys {
     'ui-default.nav_logo_dark': string;
@@ -86,13 +85,19 @@ const build = async (contents: string) => {
   return res;
 };
 
+const applyCss = (css: string) => `
+  const style = document.createElement('style');
+  style.textContent = ${JSON.stringify(css)};
+  document.head.appendChild(style);
+`;
+
 export async function buildUI() {
   const start = Date.now();
   let totalSize = 0;
   const entryPoints: string[] = [];
   const lazyModules: string[] = [];
   const newFiles = ['entry.js'];
-  for (const addon of global.addons) {
+  for (const addon of Object.values(global.addons) as string[]) {
     let publicPath = resolve(addon, 'frontend');
     if (!fs.existsSync(publicPath)) publicPath = resolve(addon, 'public');
     if (!fs.existsSync(publicPath)) continue;
@@ -112,12 +117,15 @@ export async function buildUI() {
   for (const m of lazyModules) {
     const name = basename(m).split('.')[0];
     const { outputFiles } = await build(`window.lazyModuleResolver['${name}'](require('${relative(tmp, m).replace(/\\/g, '\\\\')}'))`);
+    const css = outputFiles.filter((i) => i.path.endsWith('.css')).map((i) => i.text).join('\n');
     for (const file of outputFiles) {
-      addFile(basename(m).replace(/\.[tj]sx?$/, '.js'), file.text);
+      if (file.path.endsWith('.css')) continue;
+      addFile(basename(m).replace(/\.[tj]sx?$/, '.js'), (css ? applyCss(css) : '') + file.text);
     }
   }
   for (const lang in global.Hydro.locales) {
     if (!/^[a-zA-Z_]+$/.test(lang)) continue;
+    if (!global.Hydro.locales[lang].__interface) continue;
     const str = `window.LOCALES=${JSON.stringify(global.Hydro.locales[lang][Symbol.for('iterate')])};`;
     addFile(`lang-${lang}.js`, str);
   }
@@ -129,9 +137,7 @@ export async function buildUI() {
   const pages = entry.outputFiles.filter((i) => i.path.endsWith('.js')).map((i) => i.text);
   const css = entry.outputFiles.filter((i) => i.path.endsWith('.css')).map((i) => i.text);
   addFile('entry.js', `window._hydroLoad=()=>{
-    const style = document.createElement('style');
-    style.textContent = ${JSON.stringify(css.join('\n'))};
-    document.head.appendChild(style);
+    ${css.length ? applyCss(css.join('\n')) : ''}
     ${pages.join('\n')}
   };`);
   UiContextBase.constantVersion = hashes['entry.js'];
@@ -146,10 +152,9 @@ export async function buildUI() {
 class UiConstantsHandler extends Handler {
   noCheckPermView = true;
 
-  @param('name', Types.Filename, true)
+  @param('name', Types.Filename)
   async all(domainId: string, name: string) {
     this.response.type = 'application/javascript';
-    name ||= 'entry.js';
     if (!vfs[name]) throw new NotFoundError(name);
     this.response.addHeader('ETag', hashes[name]);
     this.response.body = vfs[name];
@@ -158,16 +163,16 @@ class UiConstantsHandler extends Handler {
 }
 
 export async function apply(ctx: Context) {
-  ctx.Route('constant', '/constant/:version', UiConstantsHandler);
   ctx.Route('constant', '/lazy/:version/:name', UiConstantsHandler);
   ctx.Route('constant', '/resource/:version/:name', UiConstantsHandler);
   ctx.on('app/started', buildUI);
-  const debouncedBuildUI = debounce(buildUI, 2000, { trailing: true });
+  const debouncedBuildUI = ctx.debounce(buildUI, 2000);
   const triggerHotUpdate = (path?: string) => {
     if (path && !path.includes('/ui-default/') && !path.includes('/public/') && !path.includes('/frontend/')) return;
     debouncedBuildUI();
   };
   ctx.on('system/setting', () => triggerHotUpdate());
+  ctx.on('system/setting-loaded', () => triggerHotUpdate());
   ctx.on('app/watch/change', triggerHotUpdate);
   ctx.on('app/watch/unlink', triggerHotUpdate);
   ctx.on('app/i18n/update', debouncedBuildUI);

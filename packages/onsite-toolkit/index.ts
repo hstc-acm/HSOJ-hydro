@@ -1,9 +1,9 @@
 /* eslint-disable max-len */
 import moment from 'moment';
 import {
-    AdmZip, avatar, ContestModel, ContestNotEndedError, Context, db, findFileSync,
+    avatar, ContestModel, ContestNotEndedError, Context, db, findFileSync,
     ForbiddenError, fs, ObjectId, parseTimeMS, PERM, ProblemConfig, ProblemModel,
-    STATUS, STATUS_SHORT_TEXTS, STATUS_TEXTS, Time, UserModel,
+    STATUS, STATUS_SHORT_TEXTS, STATUS_TEXTS, Time, UserModel, Zip,
 } from 'hydrooj';
 import { ResolverInput } from './interface';
 
@@ -113,12 +113,12 @@ export function apply(ctx: Context) {
                 const groupId = {};
                 let gid = 1;
                 for (const i of relatedGroups) groupId[i] = `group-${gid++}`;
-                const organizations = teams.flatMap((i) => i.organization);
+                const organizations = Array.from(new Set(teams.flatMap((i) => i.organization)));
                 const orgId = {};
                 let oid = 1;
                 for (const i of organizations) orgId[i] = `org-${oid++}`;
                 const duration = moment(tdoc.endAt).diff(tdoc.beginAt, 'seconds');
-                const lockDuration = tdoc.lockAt ? moment(tdoc.lockAt).diff(tdoc.beginAt, 'seconds') : null;
+                const lockDuration = tdoc.lockAt ? moment(tdoc.endAt).diff(tdoc.lockAt, 'seconds') : null;
                 const eventfeed: Record<string, any>[] = [
                     getFeed('contest', {
                         id: tdoc._id.toHexString(),
@@ -139,25 +139,25 @@ export function apply(ctx: Context) {
                         solved: +i === STATUS.STATUS_ACCEPTED,
                     })),
                     getFeed('languages', {
-                        id: 'c', name: 'C', 'entry_point_required': false, extensions: ['c'],
+                        id: 'c', name: 'C', entry_point_required: false, extensions: ['c'],
                     }),
                     getFeed('languages', {
-                        id: 'cpp', name: 'C++', 'entry_point_required': false, extensions: ['cpp', 'cc', 'cxx', 'c++'],
+                        id: 'cpp', name: 'C++', entry_point_required: false, extensions: ['cpp', 'cc', 'cxx', 'c++'],
                     }),
                     getFeed('languages', {
-                        id: 'java', name: 'Java', 'entry_point_required': true, extensions: ['java'],
+                        id: 'java', name: 'Java', entry_point_required: true, extensions: ['java'],
                     }),
                     getFeed('languages', {
-                        id: 'python3', name: 'Python 3', 'entry_point_required': false, 'entry_point_name': 'Main file', extensions: ['py', 'py3'],
+                        id: 'python3', name: 'Python 3', entry_point_required: false, entry_point_name: 'Main file', extensions: ['py', 'py3'],
                     }),
                     getFeed('languages', {
-                        id: 'kotlin', name: 'Kotlin', 'entry_point_required': true, extensions: ['kt'],
+                        id: 'kotlin', name: 'Kotlin', entry_point_required: true, extensions: ['kt'],
                     }),
                     getFeed('languages', {
-                        id: 'rust', name: 'Rust', 'entry_point_required': true, extensions: ['rs'],
+                        id: 'rust', name: 'Rust', entry_point_required: true, extensions: ['rs'],
                     }),
                     getFeed('languages', {
-                        id: 'go', name: 'Go', 'entry_point_required': true, extensions: ['go'],
+                        id: 'go', name: 'Go', entry_point_required: true, extensions: ['go'],
                     }),
                     getFeed('groups', { id: 'participants', name: '正式队伍' }),
                     getFeed('groups', { id: 'observers', name: '打星队伍' }),
@@ -199,7 +199,7 @@ export function apply(ctx: Context) {
                         ordinal: idx,
                         color: (typeof (tdoc.balloon?.[idx]) === 'object' ? tdoc.balloon[idx].name : tdoc.balloon?.[idx]) || 'white',
                         rgb: (typeof (tdoc.balloon?.[idx]) === 'object' ? tdoc.balloon[idx].color : null) || '#ffffff',
-                        time_limit: (parseTimeMS((pdict[i].config as ProblemConfig).timeMax) / 1000).toFixed(1),
+                        time_limit: Math.floor(parseTimeMS((pdict[i].config as ProblemConfig).timeMax) / 100) / 10,
                         test_data_count: 20,
                     })),
                 ];
@@ -248,19 +248,24 @@ export function apply(ctx: Context) {
                         finalized: moment().format('YYYY-MM-DDTHH:mm:ss.SSS+08:00'),
                     }),
                 ];
-                const zip = new AdmZip();
-                zip.addFile('event-feed.ndjson', Buffer.from(eventfeed.concat(submissions).concat(endState).map((i) => JSON.stringify(i)).join('\n')));
-                zip.addFile('contest/logo.png', fs.readFileSync(findFileSync('@hydrooj/onsite-toolkit/public/logo.png')));
-                for (const i of ['teams', 'organizations']) {
-                    zip.addFile(`${i}/`, Buffer.alloc(0));
-                }
-                for (const i of teams) {
-                    zip.addFile(`teams/${i.team_id}/photo.download.txt`, Buffer.from(i.avatar));
-                }
-                for (const i of organizations) {
-                    zip.addFile(`organizations/${orgId[i]}/photo.download.txt`, Buffer.from(avatar(teams.find((j) => j.organization === i)?.avatar || 'no photo, find and download it yourself')));
-                }
-                this.binary(zip.toBuffer(), `contest-${tdoc._id}-cdp.zip`);
+                const zip = new Zip.ZipWriter(new Zip.BlobWriter());
+                await Promise.all([
+                    zip.add('event-feed.ndjson', new Zip.TextReader(eventfeed.concat(submissions).concat(endState).map((i) => JSON.stringify(i)).join('\n'))),
+                    zip.add('contest/logo.png', new Zip.BlobReader(new Blob([fs.readFileSync(findFileSync('@hydrooj/onsite-toolkit/public/logo.png'))]))),
+                    zip.add('teams/', null, { directory: true }),
+                    zip.add('organizations/', null, { directory: true }),
+                ]);
+                await Promise.all(teams.map(async (i) => {
+                    await zip.add(`teams/${i.team_id}/`, null, { directory: true });
+                    await zip.add(`teams/${i.team_id}/photo.download.txt`, new Zip.TextReader(i.avatar));
+                }));
+                await Promise.all(organizations.map(async (i) => {
+                    const avatarSrc = teams.find((j) => j.organization === i)?.avatar;
+                    if (!avatarSrc) return;
+                    await zip.add(`organizations/${orgId[i]}/`, null, { directory: true });
+                    await zip.add(`organizations/${orgId[i]}/photo.download.txt`, new Zip.TextReader(avatar(avatarSrc)));
+                }));
+                this.binary(await zip.close(), `contest-${tdoc._id}-cdp.zip`);
             },
             supportedRules: ['acm'],
         });

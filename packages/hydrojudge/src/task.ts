@@ -31,6 +31,7 @@ export class JudgeTask {
     lang: string;
     code: CopyInFile;
     input?: string;
+    finished: boolean = false;
     clean: (() => Promise<any>)[] = [];
     data: FileInfo[];
     folder: string;
@@ -41,7 +42,7 @@ export class JudgeTask {
     end: (data: Partial<JudgeResultBody>) => void;
     env: Record<string, string>;
     callbackCache?: TestCase[];
-    compileCache: Record<string, Pick<Execute, 'execute' | 'copyIn'>> = {};
+    compileCache: Record<string, Pick<Execute, 'execute' | 'copyIn' | typeof Symbol.asyncDispose>> = {};
 
     constructor(public session: Session, public request: JudgeRequest) {
         this.stat.receive = new Date();
@@ -69,8 +70,7 @@ export class JudgeTask {
                 HYDRO_USER: (this.request.uid || 0).toString(),
                 HYDRO_CONTEST: tid,
             };
-            this.next = this.session.getNext(this);
-            this.end = this.session.getEnd(this);
+            Object.assign(this, this.session.getReporter(this));
             logger.info('Submission: %s/%s/%s', host, this.source, this.rid);
             await this.doSubmission();
         } catch (e) {
@@ -93,6 +93,7 @@ export class JudgeTask {
                 });
             }
         } finally {
+            this.finished = true;
             // eslint-disable-next-line no-await-in-loop
             for (const clean of this.clean) await clean()?.catch(() => null);
         }
@@ -126,9 +127,14 @@ export class JudgeTask {
             if (filenames.length) {
                 logger.info(`Getting problem data: ${this.session?.config.host || 'local'}/${source}`);
                 this.next({ message: 'Syncing testdata, please wait...' });
-                await this.session.fetchFile(source, Object.fromEntries(files.map((i) => [i.name, join(filePath, i.name)])));
-                await fs.writeFile(join(filePath, 'etags'), JSON.stringify(version));
+                await this.session.fetchFile(source, Object.fromEntries(
+                    files.filter((i) => filenames.includes(i.name))
+                        .map((i) => [i.name, join(filePath, i.name)]),
+                ));
                 this.compileCache = {};
+            }
+            if (allFilesToRemove.length || filenames.length) {
+                await fs.writeFile(join(filePath, 'etags'), JSON.stringify(version));
             }
             await fs.writeFile(join(filePath, 'lastUsage'), Date.now().toString());
             return filePath;
@@ -174,12 +180,17 @@ export class JudgeTask {
         await judge[type].judge(this);
     }
 
+    async pushClean(f: () => any | Promise<any>) {
+        if (this.finished) await f().catch(() => null);
+        else this.clean.push(f);
+    }
+
     async compile(lang: string, code: CopyInFile) {
         const copyIn = Object.fromEntries(
             (this.config.user_extra_files || []).map((i) => [basename(i), { src: i }]),
         ) as CopyIn;
         const result = await compile(this.session.getLang(lang), code, copyIn, this.next);
-        this.clean.push(result.clean);
+        await this.pushClean(result.clean);
         return result;
     }
 
@@ -187,7 +198,14 @@ export class JudgeTask {
         type: 'interactor' | 'validator' | 'checker' | 'generator' | 'manager' | 'std',
         source: CompilableSource, checkerType?: string,
     ): Promise<Execute> {
-        if (type === 'checker' && ['default', 'strict'].includes(checkerType)) return { execute: '', copyIn: {}, clean: () => Promise.resolve(null) };
+        if (type === 'checker' && ['default', 'strict'].includes(checkerType)) {
+            return {
+                execute: '',
+                copyIn: {},
+                clean: () => Promise.resolve(null),
+                [Symbol.asyncDispose]: () => Promise.resolve(null),
+            };
+        }
         if (type === 'checker' && !checkers[checkerType]) throw new FormatError('Unknown checker type {0}.', [checkerType]);
         if (this.compileCache?.[type]) {
             return {
@@ -218,19 +236,27 @@ export class JudgeTask {
         if (!lang) throw new FormatError(`Unknown ${type} language.`);
         // TODO cache compiled binary
         const result = await compile(lang, { src: file }, copyIn);
-        this.clean.push(result.clean);
-        if (!result._cacheable) return result;
+        if (!result._cacheable) {
+            await this.pushClean(result.clean);
+            return result;
+        }
         await Lock.acquire(this.folder);
         try {
             const loc = join(this.folder, `_${type}.cache`);
+            const newCopyIn = { ...result.copyIn, [result._cacheable]: { src: loc } };
+            // compiled checker should no longer need header file
+            // delete this copyIn as it's shipped with hydrojudge and may disappear after upgrade
+            delete newCopyIn['testlib.h'];
             this.compileCache[type] = {
                 execute: result.execute,
-                copyIn: { ...result.copyIn, [result._cacheable]: { src: loc } },
+                copyIn: newCopyIn,
+                [Symbol.asyncDispose]: () => Promise.resolve(null),
             };
             await get((result.copyIn[result._cacheable] as PreparedFile).fileId, loc);
             const currEtag = await fs.readFile(join(this.folder, 'etags'), 'utf-8');
             await fs.writeFile(join(this.folder, 'etags'), JSON.stringify({ ...JSON.parse(currEtag), '*cache': this.compileCache }));
         } finally {
+            await this.pushClean(result.clean);
             Lock.release(this.folder);
         }
         return result;

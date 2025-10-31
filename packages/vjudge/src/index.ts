@@ -2,9 +2,9 @@
 import os from 'os';
 import { LangConfig, STATUS } from '@hydrooj/common';
 import {
-    Context, db, DomainModel, JudgeHandler, Logger,
+    Context, db, DomainModel, JudgeResultCallbackContext, Logger,
     ProblemModel, RecordModel, Service, SettingModel,
-    sleep, SystemModel, TaskModel, Time, yaml,
+    sleep, SolutionModel, SystemModel, TaskModel, Time, yaml,
 } from 'hydrooj';
 import { BasicProvider, IBasicProvider, RemoteAccount } from './interface';
 import providers from './providers/index';
@@ -19,10 +19,11 @@ class AccountService {
     problemLists: Set<string>;
     syncing = false;
     listUpdated = false;
+    stopped = false;
     working = false;
     error = '';
 
-    constructor(public Provider: BasicProvider, public account: RemoteAccount) {
+    constructor(public Provider: BasicProvider, public account: RemoteAccount, public ctx: Context) {
         this.api = new Provider(account, async (data) => {
             await coll.updateOne({ _id: account._id }, { $set: data });
         });
@@ -44,8 +45,9 @@ class AccountService {
     }
 
     async judge(task) {
-        const next = (payload) => JudgeHandler.next({ ...payload, rid: task.rid, domainId: task.domainId });
-        const end = (payload) => JudgeHandler.end({ ...payload, rid: task.rid, domainId: task.domainId });
+        const context = new JudgeResultCallbackContext(this.ctx, task);
+        const next = (payload) => context.next(payload);
+        const end = (payload) => context.end(payload);
         await next({ status: STATUS.STATUS_FETCHED });
         try {
             const langConfig = SettingModel.langs[task.lang];
@@ -107,6 +109,7 @@ class AccountService {
                     for (const key in res.data) {
                         await ProblemModel.addTestdata(domainId, docId, key, res.data[key]);
                     }
+                    if (res.solution) await SolutionModel.add(domainId, docId, 1, res.solution);
                     logger.info(`${domainId}: problem ${docId}(${pid}) sync done -> ${targetPid}(${docId})`);
                 } finally {
                     delete syncing[`${domainId}/${pid}`];
@@ -114,6 +117,7 @@ class AccountService {
                 await sleep(5000);
             }
             page++;
+            if (this.stopped) return;
             pids = await this.api.listProblem(page, resync, list);
         }
     }
@@ -153,13 +157,22 @@ class AccountService {
         this.syncing = false;
     }
 
+    async stop() {
+        return this.api?.stop?.();
+    }
+
     async main() {
         const res = await this.login();
         if (!res) return;
-        setInterval(() => this.login(), Time.hour);
-        TaskModel.consume({ type: 'remotejudge', subType: this.account.type.split('.')[0] }, this.judge.bind(this), false);
+        const interval = setInterval(() => this.login(), Time.hour);
+        const consumer = TaskModel.consume({ type: 'remotejudge', subType: this.account.type.split('.')[0] }, this.judge.bind(this), false);
         this.working = true;
         this.handleSync();
+        this.stop = async () => {
+            clearInterval(interval);
+            consumer.destroy();
+            this.stopped = true;
+        };
     }
 }
 
@@ -171,34 +184,51 @@ declare module 'hydrooj' {
 
 class VJudgeService extends Service {
     constructor(ctx: Context) {
-        super(ctx, 'vjudge', false);
+        super(ctx, 'vjudge');
     }
 
-    accounts: RemoteAccount[];
+    accounts: RemoteAccount[] = [];
     private providers: Record<string, any> = {};
     private pool: Record<string, AccountService> = {};
-    async start() {
+    async [Context.init]() {
+        if (process.env.NODE_APP_INSTANCE !== '0') return;
+        if (process.env.HYDRO_CLI) return;
         this.accounts = await coll.find().toArray();
-        this.ctx.setInterval(this.sync.bind(this), Time.week);
+        this.ctx.interval(this.sync.bind(this), Time.week);
     }
 
     addProvider(type: string, provider: BasicProvider, override = false) {
         if (process.env.VJUDGE_DEBUG && !(`,${process.env.VJUDGE_DEBUG},`).includes(`,${type},`)) return;
         if (!override && this.providers[type]) throw new Error(`duplicate provider ${type}`);
-        this.providers[type] = provider;
-        for (const account of this.accounts.filter((a) => a.type === type)) {
-            if (account.enableOn && !account.enableOn.includes(os.hostname())) continue;
-            this.pool[`${account.type}/${account.handle}`] = new AccountService(provider, account);
-        }
+        this.ctx.effect(() => {
+            this.providers[type] = provider;
+            const services = [];
+            for (const account of this.accounts.filter((a) => a.type === type)) {
+                if (account.enableOn && !account.enableOn.includes(os.hostname())) continue;
+                const service = new AccountService(provider, account, this.ctx);
+                services.push(service);
+                this.pool[`${account.type}/${account.handle}`] = service;
+            }
+            return () => {
+                for (const service of services) service.stop();
+                delete this.providers[type];
+            };
+        });
         // FIXME: potential race condition
         if (provider.Langs) this.updateLangs(type, provider.Langs);
         // TODO dispose session
     }
 
     async updateLangs(provider: string, mapping: Record<string, Partial<LangConfig>>) {
-        const config = yaml.load(SystemModel.get('hydrooj.langs'));
+        const config = yaml.load(SystemModel.get('hydrooj.langs')) as Record<string, Partial<LangConfig>>;
         const old = yaml.dump(config);
+        const existingMappings: Set<string> = new Set();
+        for (const key in config) {
+            const target = config[key]?.validAs?.[provider];
+            if (target) existingMappings.add(target);
+        }
         for (const key in mapping) {
+            if (existingMappings.has(mapping[key].key)) continue;
             config[key] ||= {
                 execute: '/bin/echo For remote judge only',
                 hidden: true,
@@ -233,14 +263,14 @@ class VJudgeService extends Service {
 }
 
 export { BasicFetcher } from './fetch';
-export { VERDICT } from './verdict';
 export * from './interface';
+export { VERDICT } from './verdict';
 
 export const name = 'vjudge';
 export async function apply(ctx: Context) {
+    ctx.plugin(VJudgeService);
     if (process.env.NODE_APP_INSTANCE !== '0') return;
     if (process.env.HYDRO_CLI) return;
-    ctx.plugin(VJudgeService);
     ctx.inject(['migration'], async (c) => {
         c.migration.registerChannel('vjudge', [
             async function init() { }, // eslint-disable-line
@@ -267,7 +297,6 @@ export async function apply(ctx: Context) {
         ]);
     });
     ctx.inject(['vjudge'], async (c) => {
-        await c.vjudge.start();
         for (const [k, v] of Object.entries(providers)) {
             if (!SystemModel.get(`vjudge.builtin-${k}-disable`)) c.vjudge.addProvider(k, v);
         }

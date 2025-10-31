@@ -1,7 +1,6 @@
 import $ from 'jquery';
 import _ from 'lodash';
-import UserSelectAutoComplete from 'vj/components/autocomplete/UserSelectAutoComplete';
-import { ActionDialog, ConfirmDialog } from 'vj/components/dialog';
+import { confirm, InfoDialog, prompt } from 'vj/components/dialog';
 import Notification from 'vj/components/notification';
 import { NamedPage } from 'vj/misc/Page';
 import {
@@ -9,60 +8,50 @@ import {
 } from 'vj/utils';
 
 const page = new NamedPage('domain_user', () => {
-  const addUserSelector = UserSelectAutoComplete.getOrConstruct($('.dialog__body--add-user [name="user"]'));
-  const addUserDialog = new ActionDialog({
-    $body: $('.dialog__body--add-user > div'),
-    onDispatch(action) {
-      const $role = addUserDialog.$dom.find('[name="role"]');
-      if (action === 'ok') {
-        if (addUserSelector.value() === null) {
-          addUserSelector.focus();
-          return false;
-        }
-        if (!$role.val()) {
-          $role.focus();
-          return false;
-        }
-      }
-      return true;
-    },
+  $('.not-joined').data('tooltip', i18n('Click to view detailed instructions.'));
+  $('.not-joined').addClass('text-orange');
+  $(document).on('click', '.not-joined', () => {
+    new InfoDialog({
+      $body: tpl`
+        <div class="typo">
+          <p>${i18n('Users will have to manually join the domain first before selected roles can be applied.')}</p>
+          <p>${i18n('To join the domain, users can click the "Join Domain" button on "My Domain" page.')}</p>
+          <p>${i18n('Or use the following link:')}</p>
+          <p><a href="/domain/join?target=${UiContext.domain._id}">/domain/join?target=${UiContext.domain._id}</a></p>
+        </div>`,
+    }).open();
   });
-  const firstRoleForAddUser = addUserDialog.$dom.find('[name="role"] option').first().val();
-  addUserDialog.clear = function () {
-    addUserSelector.clear();
-    this.$dom.find('[name="role"]').val(firstRoleForAddUser);
-    return this;
-  };
-
-  const setRolesDialog = new ActionDialog({
-    $body: $('.dialog__body--set-role > div'),
-    onDispatch(action) {
-      const $role = setRolesDialog.$dom.find('[name="role"]');
-      if (action === 'ok' && !$role.val()) {
-        $role.focus();
-        return false;
-      }
-      return true;
-    },
-  });
-  const firstRoleForSetRole = setRolesDialog.$dom.find('[name="role"] option').first().val();
-  setRolesDialog.clear = function () {
-    this.$dom.find('[name="role"]').val(firstRoleForSetRole);
-    return this;
-  };
 
   async function handleClickAddUser() {
-    const action = await addUserDialog.clear().open();
-    if (action !== 'ok') {
-      return;
-    }
-    const user = addUserSelector.value();
-    const role = addUserDialog.$dom.find('[name="role"]').val();
+    const res = await prompt('Add User', {
+      user: {
+        type: 'userId',
+        required: true,
+        autofocus: true,
+        label: 'Username / UID',
+        columns: 6,
+      },
+      role: {
+        type: 'text',
+        required: true,
+        label: 'Role',
+        options: UiContext.roles.filter((i) => !['default', 'guest'].includes(i)),
+        columns: -6,
+      },
+      ...(UiContext.canForceJoin ? {
+        join: {
+          type: 'checkbox',
+          label: 'Mark user as joined using admin privilege',
+        },
+      } : {}),
+    });
+    if (!res?.user || !res?.role) return;
     try {
       await request.post('', {
-        operation: 'set_user',
-        uid: user._id,
-        role,
+        operation: 'set_users',
+        uids: [res.user],
+        role: res.role,
+        join: res.join,
       });
       window.location.reload();
     } catch (error) {
@@ -84,22 +73,13 @@ const page = new NamedPage('domain_user', () => {
 
   async function handleClickRemoveSelected() {
     const selectedUsers = ensureAndGetSelectedUsers();
-    if (selectedUsers === null) {
-      return;
-    }
-    const action = await new ConfirmDialog({
-      $body: tpl`
-        <div class="typo">
-          <p>${i18n('Confirm removing the selected users?')}</p>
-          <p>${i18n('Their account will not be deleted and they will be with the default role.')}</p>
-        </div>`,
-    }).open();
-    if (action !== 'yes') return;
+    if (selectedUsers === null) return;
+    if (!(await confirm(`${i18n('Confirm removing the selected users?')}
+${i18n('Their account will not be deleted and they will be with the guest role until they re-join the domain.')}`))) return;
     try {
       await request.post('', {
-        operation: 'set_users',
-        uid: selectedUsers,
-        role: 'default',
+        operation: 'kick',
+        uids: selectedUsers,
       });
       Notification.success(i18n('Selected users have been removed from the domain.'));
       await delay(2000);
@@ -110,22 +90,24 @@ const page = new NamedPage('domain_user', () => {
   }
 
   async function handleClickSetSelected() {
+    const res = await prompt('Set Role', {
+      role: {
+        type: 'text',
+        required: true,
+        label: 'Set Roles for selected users',
+        options: UiContext.roles.filter((i) => !['guest'].includes(i)),
+      },
+    });
+    if (!res?.role) return;
     const selectedUsers = ensureAndGetSelectedUsers();
-    if (selectedUsers === null) {
-      return;
-    }
-    const action = await setRolesDialog.clear().open();
-    if (action !== 'ok') {
-      return;
-    }
-    const role = setRolesDialog.$dom.find('[name="role"]').val();
+    if (selectedUsers === null) return;
     try {
       await request.post('', {
         operation: 'set_users',
-        uid: selectedUsers,
-        role,
+        uids: selectedUsers,
+        role: res.role,
       });
-      Notification.success(i18n('Role has been updated to {0} for selected users.', role));
+      Notification.success(i18n('Role has been updated to {0} for selected users.', res.role));
       await delay(2000);
       window.location.reload();
     } catch (error) {
@@ -138,8 +120,8 @@ const page = new NamedPage('domain_user', () => {
     const role = $(ev.currentTarget).val();
     try {
       await request.post('', {
-        operation: 'set_user',
-        uid: row.attr('data-uid'),
+        operation: 'set_users',
+        uids: [row.attr('data-uid')],
         role,
       });
       Notification.success(i18n('Role has been updated to {0}.', role));

@@ -1,11 +1,16 @@
 import { PassThrough } from 'stream';
 import type { Next } from 'koa';
-import { pick } from 'lodash';
 import {
     HydroRequest, HydroResponse, KoaContext, serializer,
 } from '@hydrooj/framework';
 import { errorMessage } from '@hydrooj/utils/lib/utils';
 import { SystemError, UserFacingError } from './error';
+
+const pick = <T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> => {
+    const result: Partial<Pick<T, K>> = {};
+    for (const key of keys) result[key] = obj[key];
+    return result as Pick<T, K>;
+};
 
 export default (logger, xff, xhost) => async (ctx: KoaContext, next: Next) => {
     // Base Layer
@@ -27,8 +32,8 @@ export default (logger, xff, xhost) => async (ctx: KoaContext, next: Next) => {
         template: null,
         redirect: null,
         attachment: (name, streamOrBuffer) => {
-            ctx.attachment(name);
-            if (streamOrBuffer instanceof Buffer) {
+            if (name) ctx.attachment(name);
+            if (streamOrBuffer instanceof Buffer || streamOrBuffer instanceof PassThrough) {
                 response.body = null;
                 ctx.body = streamOrBuffer;
             } else {
@@ -59,8 +64,12 @@ export default (logger, xff, xhost) => async (ctx: KoaContext, next: Next) => {
         }
         if (!response.type) {
             if (response.pjax && args.pjax) {
-                const html = await handler.renderHTML(response.pjax, response.body);
-                response.body = { fragments: [{ html }] };
+                const pjax = typeof response.pjax === 'string' ? [[response.pjax, {}]] : response.pjax;
+                response.body = {
+                    fragments: (await Promise.all(
+                        pjax.map(async ([template, extra]) => handler.renderHTML(template, { ...response.body, ...extra })),
+                    )).map((i) => ({ html: i })),
+                };
                 response.type = 'application/json';
             } else if (
                 request.json || response.redirect
@@ -112,7 +121,7 @@ export default (logger, xff, xhost) => async (ctx: KoaContext, next: Next) => {
                 ctx.response.status = 302;
                 ctx.redirect(response.redirect);
             } else if (response.body) {
-                ctx.body = response.body;
+                ctx.body = response.body instanceof Blob ? Buffer.from(await response.body.arrayBuffer()) : response.body;
                 ctx.response.status = response.status || 200;
                 ctx.response.type = response.type
                     || (request.json

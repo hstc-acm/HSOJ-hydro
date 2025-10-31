@@ -7,11 +7,11 @@ import { Binary, ObjectId } from 'mongodb';
 import { UAParser } from 'ua-parser-js';
 import { Context } from '../context';
 import {
-    AuthOperationError, BlacklistedError, DomainAlreadyExistsError, InvalidTokenError,
+    AuthOperationError, BadRequestError, BlacklistedError, DomainAlreadyExistsError, InvalidTokenError,
     NotFoundError, PermissionError, UserAlreadyExistError,
     UserNotFoundError, ValidationError, VerifyPasswordError,
 } from '../error';
-import { DomainDoc, MessageDoc, Setting } from '../interface';
+import { DomainDoc, Setting } from '../interface';
 import avatar, { validate } from '../lib/avatar';
 import * as mail from '../lib/mail';
 import { verifyTFA } from '../lib/verifyTFA';
@@ -29,7 +29,7 @@ import token from '../model/token';
 import * as training from '../model/training';
 import user from '../model/user';
 import {
-    ConnectionHandler, Handler, param, query, requireSudo, subscribe, Types,
+    Handler, param, query, requireSudo, Types,
 } from '../service/server';
 import { camelCase, md5 } from '../utils';
 
@@ -193,6 +193,7 @@ class HomeSecurityHandler extends Handler {
                 this.translate('geoip_locale'),
             );
         }
+        const relations = await this.ctx.oauth.list(this.user._id);
         this.response.template = 'home_security.html';
         this.response.body = {
             sudoUid: this.session.sudoUid || null,
@@ -201,7 +202,8 @@ class HomeSecurityHandler extends Handler {
                 'credentialID', 'name', 'credentialType', 'credentialDeviceType',
                 'authenticatorAttachment', 'regat', 'fmt',
             ])),
-            geoipProvider: this.ctx?.geoip?.provider,
+            geoipProvider: this.ctx.geoip?.provider,
+            relations,
         };
     }
 
@@ -246,8 +248,22 @@ class HomeSecurityHandler extends Handler {
             uname: this.user.uname,
             url_prefix: prefix.endsWith('/') ? prefix.slice(0, -1) : prefix,
         });
-        await mail.sendMail(email, 'Change Email', 'user_changemail_mail', m);
+        await mail.sendMail(email, 'Change Email', 'user_changemail_mail', m.toString());
         this.response.template = 'user_changemail_mail_sent.html';
+    }
+
+    @param('platform', Types.String)
+    async postLinkAccount({ }, platform: string) {
+        if (!this.ctx.oauth.providers[platform]) throw new ValidationError('platform');
+        this.session.oauthBind = platform;
+        await this.ctx.oauth.providers[platform].get.call(this);
+    }
+
+    @param('platform', Types.String)
+    async postUnlinkAccount({ }, platform: string) {
+        if (!this.ctx.oauth.providers[platform]) throw new ValidationError('platform');
+        await this.ctx.oauth.unbind(platform, this.user._id);
+        this.back();
     }
 
     @param('tokenDigest', Types.String)
@@ -298,6 +314,8 @@ class HomeSecurityHandler extends Handler {
                 type: 'public-key',
             })),
             authenticatorSelection: {
+                residentKey: 'required',
+                userVerification: 'preferred',
                 authenticatorAttachment: type,
             },
         });
@@ -355,6 +373,7 @@ function set(s: Setting, key: string, value: any) {
     if (s.family === 'setting_storage') return undefined;
     if (s.flag & setting.FLAG_DISABLED) return undefined;
     if ((s.flag & setting.FLAG_SECRET) && !value) return undefined;
+    if (s.validation && !s.validation(value)) throw new ValidationError(key);
     if (s.type === 'boolean') {
         if (value === 'on') return true;
         return false;
@@ -467,36 +486,33 @@ class UserChangemailWithCodeHandler extends Handler {
 
 class HomeDomainHandler extends Handler {
     @query('all', Types.Boolean)
-    async get(domainId: string, all: boolean) {
-        let res: DomainDoc[] = [];
-        let dudict: Record<string, any> = {};
+    async get({ }, all: boolean) {
+        let ddocs: DomainDoc[] = [];
+        const role: Record<string, string> = {};
         if (!all) {
-            dudict = await domain.getDictUserByDomainId(this.user._id);
+            const dudict = await domain.getDictUserByDomainId(this.user._id);
             const dids = Object.keys(dudict);
-            res = await domain.getMulti({ _id: { $in: dids } }).toArray();
+            ddocs = await domain.getMulti({ _id: { $in: dids } }).toArray();
         } else {
             this.checkPriv(PRIV.PRIV_VIEW_ALL_DOMAIN);
-            res = await domain.getMulti().toArray();
-            await Promise.all(res.map(async (ddoc) => {
-                dudict[ddoc._id] = await user.getById(domainId, this.user._id);
-            }));
+            ddocs = await domain.getMulti().toArray();
         }
         const canManage = {};
-        const ddocs = [];
-        for (const ddoc of res) {
-            // eslint-disable-next-line no-await-in-loop
-            const udoc = (await user.getById(ddoc._id, this.user._id))!;
-            const dudoc = dudict[ddoc._id];
-            if (['default', 'guest'].includes(dudoc.role) && this.domain._id !== ddoc._id) {
-                delete dudict[ddoc._id];
-                continue;
+        if (this.user.hasPriv(PRIV.PRIV_MANAGE_ALL_DOMAIN)) {
+            for (const ddoc of ddocs) {
+                canManage[ddoc._id] = true;
+                role[ddoc._id] = 'root';
             }
-            ddocs.push(ddoc);
-            canManage[ddoc._id] = udoc.hasPerm(PERM.PERM_EDIT_DOMAIN)
-                || udoc.hasPriv(PRIV.PRIV_MANAGE_ALL_DOMAIN);
+        } else {
+            for (const ddoc of ddocs) {
+                // eslint-disable-next-line no-await-in-loop
+                const udoc = await user.getById(ddoc._id, this.user._id);
+                canManage[ddoc._id] = udoc.hasPerm(PERM.PERM_EDIT_DOMAIN);
+                role[ddoc._id] = udoc.role;
+            }
         }
         this.response.template = 'home_domain.html';
-        this.response.body = { ddocs, dudict, canManage };
+        this.response.body = { ddocs, canManage, role };
     }
 
     @param('id', Types.String)
@@ -505,6 +521,15 @@ class HomeDomainHandler extends Handler {
         if (star) await user.setById(this.user._id, { pinnedDomains: [...this.user.pinnedDomains, id] });
         else user.setById(this.user._id, { pinnedDomains: this.user.pinnedDomains.filter((i) => i !== id) });
         this.back({ star });
+    }
+
+    @param('id', Types.String)
+    async postLeave({ }, id: string) {
+        if (id === 'system') throw new BadRequestError();
+        const ddoc = await domain.get(id);
+        if (!ddoc) throw new NotFoundError(id);
+        await domain.setJoin(id, this.user._id, false);
+        this.back();
     }
 }
 
@@ -517,7 +542,7 @@ class HomeDomainCreateHandler extends Handler {
     @param('name', Types.Title)
     @param('bulletin', Types.Content)
     @param('avatar', Types.Content, true)
-    // eslint-disable-next-line @typescript-eslint/no-shadow
+    // eslint-disable-next-line ts/no-shadow
     async post(_: string, id: string, name: string, bulletin: string, avatar: string) {
         const doc = await domain.get(id);
         if (doc) throw new DomainAlreadyExistsError(id);
@@ -591,19 +616,7 @@ class HomeMessagesHandler extends Handler {
     }
 }
 
-class HomeMessagesConnectionHandler extends ConnectionHandler {
-    category = '#message';
-
-    @subscribe('user/message')
-    async onMessageReceived(uid: number, mdoc: MessageDoc) {
-        if (uid !== this.user._id) return;
-        const udoc = (await user.getById(this.args.domainId, mdoc.from))!;
-        udoc.avatarUrl = avatar(udoc.avatar, 64);
-        this.send({ udoc, mdoc });
-    }
-}
-
-export const inject = { geoip: { required: false } };
+export const inject = { geoip: { required: false }, oauth: {} };
 export function apply(ctx: Context) {
     ctx.Route('homepage', '/', HomeHandler);
     ctx.Route('home_security', '/home/security', HomeSecurityHandler, PRIV.PRIV_USER_PROFILE);
@@ -613,5 +626,38 @@ export function apply(ctx: Context) {
     ctx.Route('home_domain', '/home/domain', HomeDomainHandler, PRIV.PRIV_USER_PROFILE);
     ctx.Route('home_domain_create', '/home/domain/create', HomeDomainCreateHandler, PRIV.PRIV_CREATE_DOMAIN);
     ctx.Route('home_messages', '/home/messages', HomeMessagesHandler, PRIV.PRIV_USER_PROFILE);
-    ctx.Connection('home_messages_conn', '/home/messages-conn', HomeMessagesConnectionHandler, PRIV.PRIV_USER_PROFILE);
+
+    async function notifyMessage(uid: number[], mdoc: any, h) {
+        const udoc = (await user.getById('system', mdoc.from))!;
+        return {
+            operation: 'event',
+            channels: uid.map((u) => `message:${u}`),
+            payload: { udoc: { ...udoc.serialize(h) as any, avatarUrl: avatar(udoc.avatar, 128) }, mdoc },
+        };
+    }
+
+    ctx.on('subscription/init', (h, privileged) => {
+        if (!privileged) return;
+        h.ctx.on('user/message', async (uid, mdoc) => {
+            h.send(await notifyMessage(uid, mdoc, h));
+        });
+    });
+
+    ctx.on('subscription/enable', (channel, h, privileged) => {
+        if (!channel.startsWith('message:') || privileged) return;
+        const uid = +channel.split(':')[1];
+        h.ctx.on('user/message', async (uids, mdoc) => {
+            if (!uids.includes(uid)) return;
+            h.send(await notifyMessage([uid], mdoc, h));
+        });
+    });
+
+    ctx.on('subscription/subscribe', (channel, udoc) => { // eslint-disable-line consistent-return
+        if (channel === 'message' && udoc.hasPriv(PRIV.PRIV_USER_PROFILE)) {
+            return {
+                ok: true,
+                channel: `message:${udoc._id}`,
+            };
+        }
+    });
 }

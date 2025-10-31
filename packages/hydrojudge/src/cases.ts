@@ -1,4 +1,3 @@
-/* eslint-disable no-await-in-loop */
 import path from 'path';
 import {
     convertIniConfig, LangConfig, normalizeSubtasks, ProblemConfigFile, readSubtasksFromFiles,
@@ -88,6 +87,9 @@ export default async function readCases(folder: string, cfg: ProblemConfigFile =
             throw new SystemError('Cannot parse testdata.', [e.message, ...(e.params || [])]);
         }
     }
+    if (result.detail === true) result.detail = 'full';
+    else if (result.detail === false) result.detail = 'case';
+    else result.detail ||= 'full';
     result.subtasks = normalizeSubtasks(result.subtasks || [], checkFile, config.time, config.memory, false, timeRate, memoryRate);
     if (result.key && args.key !== result.key) throw new FormatError('Incorrect secret key');
     if (!result.key && !args.trusted) isValidConfig(result);

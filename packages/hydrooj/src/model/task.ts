@@ -6,7 +6,7 @@ import { sleep } from '@hydrooj/utils/lib/utils';
 import { Context } from '../context';
 import { EventDoc, Task } from '../interface';
 import { Logger } from '../logger';
-import * as bus from '../service/bus';
+import bus from '../service/bus';
 import db from '../service/db';
 
 const logger = new Logger('model/task');
@@ -19,9 +19,9 @@ async function getFirst(query: Filter<Task>) {
     try {
         const q = { ...query };
         const res = await coll.findOneAndDelete(q, { sort: { priority: -1 } });
-        if (res.value) {
-            logger.debug('%o', res.value);
-            return res.value;
+        if (res) {
+            logger.debug('%o', res);
+            return res;
         }
         return null;
     } catch (e) {
@@ -54,16 +54,13 @@ export class Consumer {
                     });
                     continue;
                 }
-                // eslint-disable-next-line no-await-in-loop
-                const res = await getFirst(this.filter);
+                const res = await getFirst(this.filter); // eslint-disable-line no-await-in-loop
                 if (!res) {
-                    let timeout: NodeJS.Timeout = null;
                     // eslint-disable-next-line no-await-in-loop
-                    await new Promise((resolve) => {
-                        timeout = setTimeout(resolve, 1000 / (this.concurrency - this.processing.size));
-                        this.notify = resolve;
-                    });
-                    clearTimeout(timeout);
+                    await Promise.race([
+                        new Promise((resolve) => { this.notify = resolve; }),
+                        sleep(1000 / (this.concurrency - this.processing.size)),
+                    ]);
                     continue;
                 }
                 this.processing.add(res);
@@ -169,7 +166,6 @@ export async function apply(ctx: Context) {
     stream.on('error', async () => {
         // The $changeStream stage is only supported on replica sets
         logger.info('No replica set found.');
-        // eslint-disable-next-line no-constant-condition
         while (true) {
             let res;
             try {
@@ -182,9 +178,9 @@ export async function apply(ctx: Context) {
                 logger.error(e);
                 continue;
             }
-            if (argv.options.showEvent) logger.info('Event: %o', res.value);
+            if (argv.options.showEvent) logger.info('Event: %o', res);
             // eslint-disable-next-line no-await-in-loop
-            await (res.value ? handleEvent(res.value) : sleep(500));
+            await (res ? handleEvent(res) : sleep(500));
         }
     });
     await db.ensureIndexes(collEvent, { name: 'expire', key: { expire: 1 }, expireAfterSeconds: 0 });

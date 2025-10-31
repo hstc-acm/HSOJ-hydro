@@ -2,7 +2,7 @@ import { LangConfig, STATUS } from '@hydrooj/common';
 import { CompileError } from './error';
 import { Execute } from './interface';
 import {
-    CopyIn, CopyInFile, del, runQueued,
+    CopyIn, CopyInFile, runQueued,
 } from './sandbox';
 import { compilerText } from './utils';
 
@@ -14,7 +14,7 @@ export default async function compile(
     const command = copyIn['compile.sh'] ? '/bin/bash compile.sh' : lang.compile;
     if (command) {
         const {
-            status, stdout, stderr, fileIds,
+            status, stdout, stderr, fileIds, [Symbol.asyncDispose]: cleanup,
         } = await runQueued(
             command,
             {
@@ -36,7 +36,8 @@ export default async function compile(
         return {
             execute,
             copyIn: { ...copyIn, [target]: { fileId: fileIds[target] } },
-            clean: () => del(fileIds[target]),
+            clean: async () => await cleanup(),
+            [Symbol.asyncDispose]: async () => await cleanup(),
             _cacheable: target,
         };
     }
@@ -44,5 +45,6 @@ export default async function compile(
         execute,
         copyIn: { ...copyIn, [lang.code_file]: code },
         clean: () => Promise.resolve(null),
+        [Symbol.asyncDispose]: () => Promise.resolve(null),
     };
 }

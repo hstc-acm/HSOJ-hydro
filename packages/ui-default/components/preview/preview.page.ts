@@ -46,8 +46,8 @@ const dialogAction = (id) => [
 ];
 
 function bindCopyLink(id, src: string) {
-  const url = !(window.location.href.endsWith('file') || window.location.href.endsWith('files'))
-  || window.location.href.match('homework/.*/file') || window.location.href.match('training/.*/file')
+  const url = !['file', 'files'].some((i) => window.location.href.endsWith(i))
+    || ['homework', 'training'].some((i) => window.location.href.match(`${i}/.*/file`))
     ? `file://${src.substring(src.lastIndexOf('/') + 1)}` : src;
   const clip = new Clipboard(`#copy-${id}`, { text: () => `${url}` });
   clip.on('success', () => Notification.success(i18n(`${url.startsWith('file://') ? 'Reference' : 'Download'} link copied to clipboard!`)));
@@ -159,7 +159,7 @@ export async function previewFile(ev?, type = '') {
     Notification.info(i18n('Loading file...'));
     try {
       const { url } = await request.get(link, {}, { headers: { Pragma: 'no-cache' } });
-      if (/^(doc|xls|ppt)x?$/.test(ext)) return previewOffice(link, url);
+      if (/^(?:doc|xls|ppt)x?$/.test(ext)) return previewOffice(link, url);
       content = await request.get(url, undefined, { dataType: 'text' });
     } catch (e) {
       Notification.error(i18n('Failed to load file: {0}', e.message));

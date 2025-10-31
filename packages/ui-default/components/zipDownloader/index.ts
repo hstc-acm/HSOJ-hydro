@@ -4,7 +4,7 @@ import PQueue from 'p-queue';
 import streamsaver from 'streamsaver';
 import Notification from 'vj/components/notification';
 import {
-  api, createZipStream, gql, i18n, pipeStream, request,
+  api, createZipStream, i18n, pipeStream, request,
 } from 'vj/utils';
 import { ctx } from '../../context';
 
@@ -84,33 +84,31 @@ export default async function download(filename, targets) {
 
 declare module '../../api' {
   interface EventMap {
-    'problemset/download': (pids: number[], name: string, targets: { filename: string; url?: string; content?: string }[]) => void;
+    'problemset/download': (pids: number[], name: string, targets: { filename: string, url?: string, content?: string }[]) => void;
   }
 }
 
 export async function downloadProblemSet(pids, name = 'Export') {
   Notification.info(i18n('Downloading...'));
-  const targets = [];
+  const targets: { filename: string, url?: string, content?: string }[] = [];
   try {
     await ctx.serial('problemset/download', pids, name, targets);
     for (const pid of pids) {
-      const pdoc = await api(gql`
-        problem(id: ${+pid}) {
-          pid
-          owner
-          title
-          content
-          tag
-          nSubmit
-          nAccept
-          data {
-            name
-          }
-          additional_file {
-            name
-          }
-        }
-      `, ['data', 'problem']);
+      const pdoc = await api('problem', { id: +pid }, {
+        pid: 1,
+        owner: 1,
+        title: 1,
+        content: 1,
+        tag: 1,
+        nSubmit: 1,
+        nAccept: 1,
+        data: {
+          name: 1,
+        },
+        additional_file: {
+          name: 1,
+        },
+      });
       targets.push({
         filename: `${pid}/problem.yaml`,
         content: dump({
@@ -124,7 +122,7 @@ export async function downloadProblemSet(pids, name = 'Export') {
       });
       try {
         const c = JSON.parse(pdoc.content);
-        if (c instanceof Array || typeof c === 'string') throw new Error();
+        if (c instanceof Array || typeof c === 'string') throw new Error('Invalid content');
         for (const key of Object.keys(c)) {
           targets.push({
             filename: `${pid}/problem_${key}.md`,
