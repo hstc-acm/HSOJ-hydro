@@ -39,6 +39,9 @@ jobs:
           restore-keys: |
             cache-${{ github.ref }}-
             cache-
+      - name: Install GeoLite2-City.mmdb
+        run: |
+          wget https://git.io/GeoLite2-City.mmdb -O ./packages/geoip/GeoLite2-City.mmdb
       - name: Clear Cache
         if: "contains(github.event.head_commit.message, 'skip-cache')"
         run: |
