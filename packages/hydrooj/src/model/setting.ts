@@ -33,6 +33,7 @@ export const FLAG_SECRET = 4;
 export const FLAG_PRO = 8;
 export const FLAG_PUBLIC = 16;
 export const FLAG_PRIVATE = 32;
+export const FLAG_ADMIN = 64;
 
 export const PREFERENCE_SETTINGS: _Setting[] = [];
 export const ACCOUNT_SETTINGS: _Setting[] = [];
@@ -260,8 +261,8 @@ AccountSetting(
     Setting('setting_info', 'qq', null, 'text', 'QQ'),
     Setting('setting_info', 'gender', builtin.USER_GENDER_OTHER, builtin.USER_GENDER_RANGE, 'Gender'),
     Setting('setting_info', 'bio', null, 'markdown', 'Bio'),
-    Setting('setting_info', 'school', '', 'text', 'School', '', FLAG_DISABLED),
-    Setting('setting_info', 'studentId', '', 'text', 'Student ID', '', FLAG_DISABLED),
+    Setting('setting_info', 'school', '', 'text', 'School', '', FLAG_ADMIN),
+    Setting('setting_info', 'studentId', '', 'text', 'Student ID', '', FLAG_ADMIN),
     Setting('setting_info', 'phone', null, 'text', 'Phone', null, FLAG_DISABLED),
     Setting('setting_customize', 'backgroundImage',
         '/components/profile/backgrounds/1.jpg', 'text', 'Profile Background Image',
@@ -283,7 +284,7 @@ DomainSetting(
 
 DomainUserSetting(Schema.object({
     displayName: Schema.transform(String, (input) => saslPrep(input)).default('').description('Display Name')
-        .extra('family', 'setting_info').extra('flag', FLAG_PRIVATE),
+        .extra('family', 'setting_info').extra('flag', FLAG_ADMIN),
 
     rpInfo: Schema.any().extra('family', 'setting_storage').disabled().hidden(),
 
@@ -423,6 +424,7 @@ global.Hydro.model.setting = {
     FLAG_PRO,
     FLAG_PUBLIC,
     FLAG_PRIVATE,
+    FLAG_ADMIN,
     PREFERENCE_SETTINGS,
     ACCOUNT_SETTINGS,
     SETTINGS,

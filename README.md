@@ -40,6 +40,7 @@ packages/hydrojudge/langs.yaml
 packages/hydrooj/setting.yaml
 packages/hydrooj/src/handler/user.ts
 packages/hydrooj/src/model/setting.ts
+packages/ui-default/templates/partials/setting.html
 packages/ui-default/misc/immersive.styl
 packages/ui-default/templates/partials/footer.html
 packages/ui-default/templates/partials/homepage/hitokoto.html

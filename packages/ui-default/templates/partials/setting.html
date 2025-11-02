@@ -5,7 +5,7 @@
   </div>
   <div class="section__body">
   {%- for setting in family_settings -%}
-  {% if not setting.flag|bitand(model.setting.FLAG_HIDDEN) %}
+  {% if not (setting.flag|bitand(model.setting.FLAG_HIDDEN) or ( setting.flag|bitand(64)==64 ) > handler.user.hasPriv(PRIV.PRIV_EDIT_SYSTEM)) %}
   {% set secret = setting.flag|bitand(model.setting.FLAG_SECRET) != 0 %}
   {% if setting.type == 'text' or setting.type == 'password' or setting.type == 'number' or setting.type == 'float' %}
     {{ form.form_text({
